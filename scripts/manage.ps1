@@ -12,8 +12,9 @@ $script:Work = Join-Path $script:Root 'work/deployment'
 $script:SettingsPath = Join-Path $script:Work 'settings.json'
 $script:Node = $null
 $script:SshArgs = @()
-function Write-Stage([string]$Message) {
-  Write-Host ('[Music Desk] ' + $Message) -ForegroundColor Cyan
+function Write-Stage([string]$Message,[string]$ConsoleMessage='') {
+  if(-not $ConsoleMessage){$ConsoleMessage=$Message}
+  Write-Host ('[Music Desk] ' + $ConsoleMessage)
   [IO.Directory]::CreateDirectory($script:Work) | Out-Null
   [IO.File]::AppendAllText((Join-Path $script:Work ($Edition+'-last.log')),([DateTime]::Now.ToString('s')+' '+$Message+[Environment]::NewLine),[Text.UTF8Encoding]::new($false))
 }
@@ -38,10 +39,89 @@ function Get-Native([string]$File,[string[]]$Arguments) {
     return ($output.TrimEnd([char]13,[char]10) -split '\r?\n')
   } finally { $process.Dispose() }
 }
-function Invoke-Native([string]$File,[string[]]$Arguments) {
-  $process=New-NativeProcess $File $Arguments $false
-  try { $process.WaitForExit();if ($process.ExitCode -ne 0) { throw ('命令执行失败：'+[IO.Path]::GetFileName($File)+'，退出码 '+$process.ExitCode) } }
-  finally { $process.Dispose() }
+function Invoke-Native([string]$File,[string[]]$Arguments,[switch]$ShowOutput) {
+  $process=New-NativeProcess $File $Arguments ([bool]$ShowOutput)
+  try {
+    if($ShowOutput) {
+      $outTask=$process.StandardOutput.ReadLineAsync();$errTask=$process.StandardError.ReadLineAsync()
+      $clock=[Diagnostics.Stopwatch]::StartNew();$lastOutput=0.0
+      while($outTask -or $errTask -or -not $process.HasExited) {
+        while($outTask -and $outTask.IsCompleted) {
+          $line=$outTask.GetAwaiter().GetResult()
+          if($null -eq $line){$outTask=$null;break}
+          Write-Host $line;$lastOutput=$clock.Elapsed.TotalSeconds;$outTask=$process.StandardOutput.ReadLineAsync()
+        }
+        while($errTask -and $errTask.IsCompleted) {
+          $line=$errTask.GetAwaiter().GetResult()
+          if($null -eq $line){$errTask=$null;break}
+          Write-Host $line;$lastOutput=$clock.Elapsed.TotalSeconds;$errTask=$process.StandardError.ReadLineAsync()
+        }
+        if($clock.Elapsed.TotalSeconds-$lastOutput -ge 10) {
+          Write-Host ('[Music Desk] '+[IO.Path]::GetFileName($File)+' is still working ('+[Math]::Floor($clock.Elapsed.TotalSeconds)+'s elapsed)...')
+          $lastOutput=$clock.Elapsed.TotalSeconds
+        }
+        if($outTask -or $errTask -or -not $process.HasExited){Start-Sleep -Milliseconds 50}
+      }
+    }
+    $process.WaitForExit()
+    if($process.ExitCode -ne 0){throw ('Command failed: '+[IO.Path]::GetFileName($File)+'; exit code '+$process.ExitCode)}
+  } finally { $process.Dispose() }
+}
+function Write-DownloadStatus([string]$Label,[long]$Bytes,[long]$Total,$Clock,$Progress,[switch]$Complete) {
+  $elapsed=$Clock.Elapsed.TotalSeconds
+  $period=[Math]::Max(0.001,$elapsed-$Progress.LastAt)
+  $speed=[Math]::Max(0,($Bytes-$Progress.LastBytes)/$period/1024)
+  $size=('{0:F2} MiB' -f ($Bytes/1MB))
+  if($Total -gt 0){$size=('{0:F2} / {1:F2} MiB ({2:F0}%)' -f ($Bytes/1MB),($Total/1MB),[Math]::Min(100,[Math]::Floor($Bytes*100.0/$Total)))}
+  $suffix='';if($Complete){$suffix=' | complete'}
+  Write-Host ('[Download] {0}: {1} | {2:F1} KiB/s | {3:F0}s elapsed{4}' -f $Label,$size,$speed,$elapsed,$suffix)
+  $Progress.LastAt=$elapsed;$Progress.LastBytes=$Bytes
+}
+function Receive-File([uri]$Uri,[string]$Destination,[string]$Label,[int]$ConnectTimeoutSeconds=30,[int]$IdleTimeoutSeconds=30,[int]$TimeoutSeconds=600) {
+  if($Uri.Scheme -ne 'https' -and -not($Uri.Scheme -eq 'http' -and $Uri.IsLoopback)){throw 'Download requires HTTPS'}
+  if(-not $Destination.EndsWith('.part',[StringComparison]::OrdinalIgnoreCase)){throw 'Download destination must be a temporary .part file'}
+  if($ConnectTimeoutSeconds -lt 1 -or $IdleTimeoutSeconds -lt 1 -or $TimeoutSeconds -lt 1){throw 'Download timeout must be positive'}
+  Add-Type -AssemblyName System.Net.Http
+  $destinationPath=[IO.Path]::GetFullPath($Destination)
+  [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destinationPath))|Out-Null
+  $client=[Net.Http.HttpClient]::new();$client.Timeout=[Threading.Timeout]::InfiniteTimeSpan
+  $connect=[Threading.CancellationTokenSource]::new();$connect.CancelAfter([TimeSpan]::FromSeconds([Math]::Min($ConnectTimeoutSeconds,$TimeoutSeconds)))
+  $response=$null;$inputStream=$null;$outputStream=$null;$created=$false;$success=$false
+  $clock=[Diagnostics.Stopwatch]::StartNew();$progress=@{LastAt=0.0;LastBytes=0L}
+  Write-Host ('[Download] Connecting to {0}; connection timeout {1}s...' -f $Uri.Host,[Math]::Min($ConnectTimeoutSeconds,$TimeoutSeconds))
+  try {
+    try{$response=$client.GetAsync($Uri,[Net.Http.HttpCompletionOption]::ResponseHeadersRead,$connect.Token).GetAwaiter().GetResult()}
+    catch{throw ('Download connection failed or timed out: '+$_.Exception.GetBaseException().Message)}
+    if(-not $response.IsSuccessStatusCode){throw ('Download failed: HTTP '+[int]$response.StatusCode)}
+    $total=0L;if($null -ne $response.Content.Headers.ContentLength){$total=[long]$response.Content.Headers.ContentLength}
+    $inputStream=$response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+    $outputStream=[IO.File]::Open($destinationPath,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::Read);$created=$true
+    $buffer=New-Object byte[] 65536;$received=0L;$lastData=$clock.Elapsed.TotalSeconds
+    Write-DownloadStatus $Label $received $total $clock $progress
+    while($true) {
+      $read=$inputStream.ReadAsync($buffer,0,$buffer.Length)
+      while(-not $read.IsCompleted) {
+        if($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds){throw ('Download exceeded '+$TimeoutSeconds+' seconds. Run the same launcher to retry.')}
+        if($clock.Elapsed.TotalSeconds-$lastData -ge $IdleTimeoutSeconds){throw ('No download data for '+$IdleTimeoutSeconds+' seconds. Check the network and run the same launcher to retry.')}
+        if($clock.Elapsed.TotalSeconds-$progress.LastAt -ge 1){Write-DownloadStatus $Label $received $total $clock $progress}
+        Start-Sleep -Milliseconds 100
+      }
+      $count=$read.GetAwaiter().GetResult()
+      if($count -eq 0){break}
+      if($clock.Elapsed.TotalSeconds -ge $TimeoutSeconds){throw ('Download exceeded '+$TimeoutSeconds+' seconds. Run the same launcher to retry.')}
+      $outputStream.Write($buffer,0,$count);$received+=$count;$lastData=$clock.Elapsed.TotalSeconds
+      if($clock.Elapsed.TotalSeconds-$progress.LastAt -ge 1){Write-DownloadStatus $Label $received $total $clock $progress}
+    }
+    if($total -gt 0 -and $received -ne $total){throw 'Download ended before the expected file size was received'}
+    $outputStream.Flush();$outputStream.Dispose();$outputStream=$null;$success=$true
+    Write-DownloadStatus $Label $received $total $clock $progress -Complete
+  } finally {
+    if($outputStream){$outputStream.Dispose()}
+    if($inputStream){$inputStream.Dispose()}
+    if($response){$response.Dispose()}
+    $connect.Dispose();$client.Dispose()
+    if($created -and -not $success -and (Test-Path -LiteralPath $destinationPath)){Remove-Item -LiteralPath $destinationPath -Force}
+  }
 }
 function Ensure-Node {
   if ($script:Node) { return }
@@ -56,18 +136,19 @@ function Ensure-Node {
     }
   }
   if (-not $script:Node) {
-    Write-Stage '首次准备官方 Node.js 22 工具链…'
+    Write-Stage '首次准备官方 Node.js 22 工具链…' -ConsoleMessage 'Preparing the official Node.js 22 toolchain...'
     $cache=Join-Path $script:Root 'work/toolchain'
     [IO.Directory]::CreateDirectory($cache) | Out-Null
     $zip=Join-Path $cache 'node-v22.14.0-win-x64.zip'
     $expected='55b639295920b219bb2acbcfa00f90393a2789095b7323f79475c9f34795f217'
     if (-not (Test-Path -LiteralPath $zip)) {
       [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
-      Invoke-WebRequest -UseBasicParsing -Uri 'https://nodejs.org/download/release/v22.14.0/node-v22.14.0-win-x64.zip' -OutFile ($zip+'.part')
+      Receive-File -Uri 'https://nodejs.org/download/release/v22.14.0/node-v22.14.0-win-x64.zip' -Destination ($zip+'.part') -Label 'Node.js 22'
       if ((Get-FileHash -LiteralPath ($zip+'.part') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Node.js 下载校验失败，未使用该文件。' }
       Move-Item -LiteralPath ($zip+'.part') -Destination $zip
     }
     if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Node.js 缓存校验失败。' }
+    Write-Stage 'Node.js 下载校验通过，正在解压…' -ConsoleMessage 'Node.js checksum verified. Extracting the toolchain...'
     Expand-Archive -LiteralPath $zip -DestinationPath $cache -Force
     $script:Node=Join-Path $cache 'node-v22.14.0-win-x64/node.exe'
     $env:TSMD_NPM_CLI=Join-Path (Split-Path $script:Node) 'node_modules/npm/bin/npm-cli.js'
@@ -77,7 +158,7 @@ function Ensure-Node {
 function Prepare-Project([string]$Mode,[switch]$Package) {
   Ensure-Node
   $verb='prepare'; if ($Package) { $verb='package' }
-  Invoke-Native $script:Node @('scripts/prepare-project.mjs',$verb,$Mode)
+  Invoke-Native $script:Node @('scripts/prepare-project.mjs',$verb,$Mode) -ShowOutput
 }
 function Read-Settings([switch]$Reset) {
   if ((Test-Path -LiteralPath $script:SettingsPath) -and -not $Reset) { $settings=Get-Content -LiteralPath $script:SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json }
@@ -162,12 +243,12 @@ function Update-Server {
   $hash=Package-Hash $archive; $id=[Guid]::NewGuid().ToString('N')
   Upload $archive ('tsmd-update-'+$id+'.tar.gz')
   Upload 'deploy/update-ubuntu.sh' ('tsmd-update-'+$id+'.sh')
-  Write-Stage '保留现有数据和音频选择，更新服务器代码…'
+  Write-Stage '保留现有数据和音频选择，更新服务器代码…' -ConsoleMessage 'Updating server code; retaining data and audio backend...'
   Remote ('bash ~/tsmd-update-'+$id+'.sh ~/tsmd-update-'+$id+'.tar.gz '+$hash)
 }
 function Install-Browser {
-  Write-Stage '首次准备服务器官网登录组件；已安装的组件后续会复用。'
-  Invoke-Native $script:Node @('scripts/prepare-official-browser.mjs')
+  Write-Stage '首次准备服务器官网登录组件；已安装的组件后续会复用。' -ConsoleMessage 'Preparing the official browser login component; installed files will be reused.'
+  Invoke-Native $script:Node @('scripts/prepare-official-browser.mjs') -ShowOutput
   $browser='release/server/tools/chrome-linux64-155.0.8059.84.zip'
   $browserHash=Package-Hash $browser
   $update='release/server/TS-Music-Desk-Server-'+(Version)+'-update.tar.gz'
@@ -180,7 +261,7 @@ function Install-Browser {
 function Deploy-Server {
   Connect-Settings
   $probe=Probe-Server
-  Write-Stage '准备当前版本的完整包和增量包…'
+  Write-Stage '准备当前版本的完整包和增量包…' -ConsoleMessage 'Preparing the current server packages...'
   Prepare-Project 'server' -Package
   if ($probe.installed) {
     if ($probe.browser) { Update-Server }
@@ -189,11 +270,11 @@ function Deploy-Server {
     $archive='release/server/TS-Music-Desk-Server-'+(Version)+'.tar.gz'
     $hash=Package-Hash $archive; $id=[Guid]::NewGuid().ToString('N')
     Upload $archive ('tsmd-install-'+$id+'.tar.gz')
-    Write-Stage '首次安装服务器后台；主人密码只在终端显示，请自行保存。'
+    Write-Stage '首次安装服务器后台；主人密码只在终端显示，请自行保存。' -ConsoleMessage 'Installing the server service. Save the owner password shown below.'
     Remote ('set -eu; archive="$HOME/tsmd-install-'+$id+'.tar.gz"; test "$(sha256sum "$archive" | cut -d" " -f1)" = '+$hash+'; app="$HOME/ts-music-desk-server-'+$id+'"; mkdir "$app"; tar -xzf "$archive" -C "$app"; bash "$app/deploy/preflight.sh"; bash "$app/deploy/install-ubuntu.sh"')
     Install-Browser
   }
-  Write-Stage '部署完成。'
+  Write-Stage '部署完成。' -ConsoleMessage 'Deployment completed.'
   Open-Console
 }
 function Quote-Native([string]$Value) {
@@ -225,7 +306,7 @@ function Fixed-Endpoint {
   $parsed=$null
   if (-not [Net.IPAddress]::TryParse($ip,[ref]$parsed) -or $parsed.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) { throw '固定入口目前需要服务器公网 IPv4。' }
   Write-Host '请先在云防火墙放行 TCP 80、443。已有 HTTPS 配置会复用。'
-  Invoke-Native $script:Node @('scripts/prepare-server-https.mjs')
+  Invoke-Native $script:Node @('scripts/prepare-server-https.mjs') -ShowOutput
   $id=[Guid]::NewGuid().ToString('N')
   Upload 'deploy/enable-fixed-endpoint.sh' ('tsmd-fixed-'+$id+'.sh')
   Upload 'release/server/tools/caddy_2.11.7_linux_amd64.tar.gz' ('tsmd-fixed-'+$id+'.tar.gz')
@@ -233,7 +314,7 @@ function Fixed-Endpoint {
 }
 function Audio-Transport([string]$Mode) {
   Connect-Settings;Ensure-Node;$id=[Guid]::NewGuid().ToString('N')
-  if ($Mode -eq 'official') { Invoke-Native $script:Node @('scripts/prepare-official-audio.mjs') }
+  if ($Mode -eq 'official') { Invoke-Native $script:Node @('scripts/prepare-official-audio.mjs') -ShowOutput }
   Upload 'deploy/official-transport.sh' ('tsmd-audio-'+$id+'.sh')
   if ($Mode -eq 'custom') { Remote ('bash ~/tsmd-audio-'+$id+'.sh --custom');return }
   if ($Mode -eq 'diagnose') { Upload 'scripts/diagnose-server-audio.mjs' ('tsmd-audio-'+$id+'.mjs');Remote ('bash ~/tsmd-audio-'+$id+'.sh --diagnose ~/tsmd-audio-'+$id+'.mjs');return }

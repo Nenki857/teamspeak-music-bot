@@ -41,7 +41,7 @@ function dependencies(directory, name, required, options = {}) {
   const marker = resolve(state, name + '-dependencies');
   const previous = existsSync(marker) ? readFileSync(marker, 'utf8') : null;
   if (needsPreparation({ previous, expected, required: required.map(file => resolve(directory, file)) })) {
-    console.log('安装或更新依赖：' + name + '（已准备好的依赖不会重复下载）');
+    console.log('Installing or updating dependencies: ' + name + ' (reusing prepared dependencies)' );
     npm(['ci', ...(options.ignoreScripts ? ['--ignore-scripts'] : []), '--no-audit', '--no-fund'], directory, options.environment);
   }
   writeFileSync(marker, expected);
@@ -51,7 +51,7 @@ async function cloudflared() {
   if (!/^https:\/\/github\.com\/cloudflare\/cloudflared\/releases\/download\/[\w.-]+\/cloudflared-windows-amd64\.exe$/.test(metadata.url) || !/^sha256:[a-f0-9]{64}$/.test(metadata.digest)) throw Error('通道组件下载信息无效');
   const target = resolve(root, 'resources/cloudflared.exe'), expected = metadata.digest.slice(7);
   if (existsSync(target)) { if (fileHash(target) !== expected) throw Error('现有通道组件校验失败，未覆盖文件'); return; }
-  console.log('首次准备公网通道组件…');
+  console.log('Preparing the public tunnel component...' );
   const temporary = target + '.part-' + randomUUID();
   try {
     const response = await fetch(metadata.url, { signal: AbortSignal.timeout(180000) });
@@ -85,7 +85,7 @@ export async function prepare(edition) {
     if (!existsSync(bundled)) copyFileSync(process.execPath, bundled);
     await cloudflared();
   }
-  console.log(edition === 'server' ? '服务器版代码已准备。' : '本地版已准备，可直接启动。');
+  console.log(edition === 'server' ? 'Server edition is ready.' : 'Local edition is ready to start.');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [action, edition = 'local'] = process.argv.slice(2);
