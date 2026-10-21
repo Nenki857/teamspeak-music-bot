@@ -39,7 +39,7 @@ function Get-Native([string]$File,[string[]]$Arguments) {
     return ($output.TrimEnd([char]13,[char]10) -split '\r?\n')
   } finally { $process.Dispose() }
 }
-function Invoke-Native([string]$File,[string[]]$Arguments,[switch]$ShowOutput) {
+function Invoke-Native([string]$File,[string[]]$Arguments,[switch]$ShowOutput,[string]$Activity='Running setup task') {
   $process=New-NativeProcess $File $Arguments ([bool]$ShowOutput)
   try {
     if($ShowOutput) {
@@ -49,15 +49,15 @@ function Invoke-Native([string]$File,[string[]]$Arguments,[switch]$ShowOutput) {
         while($outTask -and $outTask.IsCompleted) {
           $line=$outTask.GetAwaiter().GetResult()
           if($null -eq $line){$outTask=$null;break}
-          Write-Host $line;$lastOutput=$clock.Elapsed.TotalSeconds;$outTask=$process.StandardOutput.ReadLineAsync()
+          if($line -match '^\[Setup\] (.+)$'){$Activity=$Matches[1]};Write-Host $line;$lastOutput=$clock.Elapsed.TotalSeconds;$outTask=$process.StandardOutput.ReadLineAsync()
         }
         while($errTask -and $errTask.IsCompleted) {
           $line=$errTask.GetAwaiter().GetResult()
           if($null -eq $line){$errTask=$null;break}
-          Write-Host $line;$lastOutput=$clock.Elapsed.TotalSeconds;$errTask=$process.StandardError.ReadLineAsync()
+          if($line -match '^\[Setup\] (.+)$'){$Activity=$Matches[1]};Write-Host $line;$lastOutput=$clock.Elapsed.TotalSeconds;$errTask=$process.StandardError.ReadLineAsync()
         }
         if($clock.Elapsed.TotalSeconds-$lastOutput -ge 10) {
-          Write-Host ('[Music Desk] '+[IO.Path]::GetFileName($File)+' is still working ('+[Math]::Floor($clock.Elapsed.TotalSeconds)+'s elapsed)...')
+          Write-Host ('[Status] '+$Activity+' | '+[Math]::Floor($clock.Elapsed.TotalSeconds)+'s elapsed | waiting for new output; download progress unknown')
           $lastOutput=$clock.Elapsed.TotalSeconds
         }
         if($outTask -or $errTask -or -not $process.HasExited){Start-Sleep -Milliseconds 50}
@@ -158,7 +158,7 @@ function Ensure-Node {
 function Prepare-Project([string]$Mode,[switch]$Package) {
   Ensure-Node
   $verb='prepare'; if ($Package) { $verb='package' }
-  Invoke-Native $script:Node @('scripts/prepare-project.mjs',$verb,$Mode) -ShowOutput
+  Invoke-Native $script:Node @('scripts/prepare-project.mjs',$verb,$Mode) -ShowOutput -Activity ('Preparing '+$Mode+' edition')
 }
 function Read-Settings([switch]$Reset) {
   if ((Test-Path -LiteralPath $script:SettingsPath) -and -not $Reset) { $settings=Get-Content -LiteralPath $script:SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json }
@@ -248,7 +248,7 @@ function Update-Server {
 }
 function Install-Browser {
   Write-Stage '首次准备服务器官网登录组件；已安装的组件后续会复用。' -ConsoleMessage 'Preparing the official browser login component; installed files will be reused.'
-  Invoke-Native $script:Node @('scripts/prepare-official-browser.mjs') -ShowOutput
+  Invoke-Native $script:Node @('scripts/prepare-official-browser.mjs') -ShowOutput -Activity 'Preparing the server browser component'
   $browser='release/server/tools/chrome-linux64-155.0.8059.84.zip'
   $browserHash=Package-Hash $browser
   $update='release/server/TS-Music-Desk-Server-'+(Version)+'-update.tar.gz'
@@ -306,7 +306,7 @@ function Fixed-Endpoint {
   $parsed=$null
   if (-not [Net.IPAddress]::TryParse($ip,[ref]$parsed) -or $parsed.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) { throw '固定入口目前需要服务器公网 IPv4。' }
   Write-Host '请先在云防火墙放行 TCP 80、443。已有 HTTPS 配置会复用。'
-  Invoke-Native $script:Node @('scripts/prepare-server-https.mjs') -ShowOutput
+  Invoke-Native $script:Node @('scripts/prepare-server-https.mjs') -ShowOutput -Activity 'Preparing the HTTPS component'
   $id=[Guid]::NewGuid().ToString('N')
   Upload 'deploy/enable-fixed-endpoint.sh' ('tsmd-fixed-'+$id+'.sh')
   Upload 'release/server/tools/caddy_2.11.7_linux_amd64.tar.gz' ('tsmd-fixed-'+$id+'.tar.gz')
@@ -314,7 +314,7 @@ function Fixed-Endpoint {
 }
 function Audio-Transport([string]$Mode) {
   Connect-Settings;Ensure-Node;$id=[Guid]::NewGuid().ToString('N')
-  if ($Mode -eq 'official') { Invoke-Native $script:Node @('scripts/prepare-official-audio.mjs') -ShowOutput }
+  if ($Mode -eq 'official') { Invoke-Native $script:Node @('scripts/prepare-official-audio.mjs') -ShowOutput -Activity 'Preparing the official audio component' }
   Upload 'deploy/official-transport.sh' ('tsmd-audio-'+$id+'.sh')
   if ($Mode -eq 'custom') { Remote ('bash ~/tsmd-audio-'+$id+'.sh --custom');return }
   if ($Mode -eq 'diagnose') { Upload 'scripts/diagnose-server-audio.mjs' ('tsmd-audio-'+$id+'.mjs');Remote ('bash ~/tsmd-audio-'+$id+'.sh --diagnose ~/tsmd-audio-'+$id+'.mjs');return }

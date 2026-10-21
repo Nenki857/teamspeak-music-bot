@@ -66,7 +66,8 @@ test('setup child output and failure exit code reach the launcher',{skip},async(
   });
 });
 test('quiet setup work emits a periodic heartbeat',{skip},async()=>{
-  const args=['-e','setTimeout(()=>{},10500)'];
+  const args=['-e',"console.log('[Setup] Installing desktop dependencies (npm)');setTimeout(()=>{},10500)"];
   const result=await run('Invoke-Native '+quote(process.execPath)+' @('+args.map(quote).join(',')+') -ShowOutput');
-  assert.match(result.stdout,/is still working \(10s elapsed\)/);
+  assert.match(result.stdout,/\[Status\] Installing desktop dependencies \(npm\) \| 10s elapsed \| waiting for new output/);
+  assert.doesNotMatch(result.stdout,/node\.exe is still working/);
 });

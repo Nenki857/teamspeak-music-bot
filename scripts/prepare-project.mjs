@@ -1,10 +1,9 @@
-import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync, renameSync, rmSync, createWriteStream } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { preparePublicTunnel } from './prepare-public-tunnel.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const core = resolve(root, 'vendor/teamspeak-music-bot-1.13.2');
 const state = resolve(root, 'work/setup');
@@ -41,27 +40,12 @@ function dependencies(directory, name, required, options = {}) {
   const marker = resolve(state, name + '-dependencies');
   const previous = existsSync(marker) ? readFileSync(marker, 'utf8') : null;
   if (needsPreparation({ previous, expected, required: required.map(file => resolve(directory, file)) })) {
-    console.log('Installing or updating dependencies: ' + name + ' (reusing prepared dependencies)' );
-    npm(['ci', ...(options.ignoreScripts ? ['--ignore-scripts'] : []), '--no-audit', '--no-fund'], directory, options.environment);
+    console.log('[Setup] Installing ' + name + ' dependencies (npm)');
+    npm(['ci', ...(options.ignoreScripts ? ['--ignore-scripts'] : []), '--no-audit', '--no-fund', '--foreground-scripts', '--loglevel=http', '--no-progress'], directory, options.environment);
   }
   writeFileSync(marker, expected);
 }
-async function cloudflared() {
-  const metadata = JSON.parse(readFileSync(resolve(root, 'resources/cloudflared-version.json')));
-  if (!/^https:\/\/github\.com\/cloudflare\/cloudflared\/releases\/download\/[\w.-]+\/cloudflared-windows-amd64\.exe$/.test(metadata.url) || !/^sha256:[a-f0-9]{64}$/.test(metadata.digest)) throw Error('通道组件下载信息无效');
-  const target = resolve(root, 'resources/cloudflared.exe'), expected = metadata.digest.slice(7);
-  if (existsSync(target)) { if (fileHash(target) !== expected) throw Error('现有通道组件校验失败，未覆盖文件'); return; }
-  console.log('Preparing the public tunnel component...' );
-  const temporary = target + '.part-' + randomUUID();
-  try {
-    const response = await fetch(metadata.url, { signal: AbortSignal.timeout(180000) });
-    if (!response.ok) throw Error('公网通道组件下载失败：HTTP ' + response.status);
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(temporary, { flags: 'wx' }));
-    if (fileHash(temporary) !== expected) throw Error('通道组件下载校验失败');
-    renameSync(temporary, target);
-  } finally { rmSync(temporary, { force: true }); }
-}
-export async function prepare(edition) {
+export async function prepare(edition, { requireTunnel = false } = {}) {
   if (!['local', 'server'].includes(edition)) throw Error('版本类型无效');
   if (process.versions.node.split('.')[0] !== '22') throw Error('请使用统一入口准备 Node.js 22');
   mkdirSync(state, { recursive: true });
@@ -69,28 +53,29 @@ export async function prepare(edition) {
   dependencies(core, 'core', ['node_modules/typescript/bin/tsc', 'node_modules/NeteaseCloudMusicApi/package.json', ...(edition === 'local' ? ['node_modules/ffmpeg-static/ffmpeg.exe'] : [])], { ignoreScripts: edition === 'server' });
   if (edition === 'local') {
   const native = spawnSync(process.execPath, ['--input-type=module', '-e', "import{createRequire}from'node:module';const r=createRequire(process.argv[1]);const DB=r('better-sqlite3');new DB(':memory:').close();new(r('@discordjs/opus').OpusEncoder)(48000,2).encode(Buffer.alloc(3840));", resolve(core, 'package.json')], { cwd: root, windowsHide: true, stdio: 'ignore' });
-  if (native.status !== 0) npm(['rebuild', 'better-sqlite3', '@discordjs/opus', '--foreground-scripts'], core);
+  if (native.status !== 0) { console.log('[Setup] Preparing native audio dependencies'); npm(['rebuild', 'better-sqlite3', '@discordjs/opus', '--foreground-scripts'], core); }
   }
   const coreStamp = resolve(state, 'core-build'), coreHash = sourceFingerprint(['vendor/teamspeak-music-bot-1.13.2/src']) + fileHash(resolve(core, 'tsconfig.json'));
-  if (!existsSync(resolve(core, 'dist/audio/player.js')) || !existsSync(coreStamp) || readFileSync(coreStamp, 'utf8') !== coreHash) { run(['scripts/build-core.mjs']); writeFileSync(coreStamp, coreHash); }
+  if (!existsSync(resolve(core, 'dist/audio/player.js')) || !existsSync(coreStamp) || readFileSync(coreStamp, 'utf8') !== coreHash) { console.log('[Setup] Building the audio engine'); run(['scripts/build-core.mjs']); writeFileSync(coreStamp, coreHash); }
   const marker = resolve(state, edition + '-build');
   const fingerprint = sourceFingerprint(['src/renderer', 'public']) + fileHash(resolve(root, 'vite.config.mjs')) + fileHash(resolve(root, 'package-lock.json'));
   const output = resolve(root, edition === 'server' ? 'dist/server-ui/index.html' : 'dist/ui/index.html');
   if (!existsSync(output) || !existsSync(marker) || readFileSync(marker, 'utf8') !== fingerprint) {
+    console.log('[Setup] Building the ' + edition + ' interface');
     run(['node_modules/vite/bin/vite.js', 'build', ...(edition === 'server' ? ['--mode', 'server'] : [])]); writeFileSync(marker, fingerprint);
   }
   if (edition === 'local') {
     mkdirSync(resolve(root, 'resources/node'), { recursive: true });
     const bundled = resolve(root, 'resources/node/node.exe');
     if (!existsSync(bundled)) copyFileSync(process.execPath, bundled);
-    await cloudflared();
+    await preparePublicTunnel({ root, required: requireTunnel });
   }
   console.log(edition === 'server' ? 'Server edition is ready.' : 'Local edition is ready to start.');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [action, edition = 'local'] = process.argv.slice(2);
   try {
-    await prepare(edition);
+    await prepare(edition, { requireTunnel: action === 'package' });
     if (action === 'package' && edition === 'server') for (const file of ['package-server.mjs', 'check-server-package.mjs', 'package-server-update.mjs', 'check-server-update.mjs']) run(['scripts/' + file]);
     else if (action === 'package' && edition === 'local') {
       run(['scripts/create-icon.mjs']);
