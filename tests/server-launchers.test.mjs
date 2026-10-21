@@ -13,7 +13,7 @@ test('only two end-user launchers remain and use CRLF without BOM',()=>{
   assert.deepEqual(readdirSync('.').filter(name=>name.endsWith('.cmd')),[]);
   for(const[folder,name,edition]of [['本地版','一键启动.cmd','local'],['服务器版','一键部署.cmd','server']]){
     assert.deepEqual(readdirSync(folder).filter(name=>name.endsWith('.cmd')),[name]);
-    const text=readFileSync(join(folder,name),'utf8');assert.ok(!text.startsWith('\uFEFF'));assert.doesNotMatch(text,/(?<!\r)\n/);
+    const text=readFileSync(join(folder,name),'utf8');assert.ok(!text.startsWith('\uFEFF'));assert.doesNotMatch(text,/(?<!\r)\n/);assert.ok([...Buffer.from(text)].every(byte=>byte<=127),'CMD commands must stay ASCII so Git archive LF conversion cannot corrupt non-ASCII lines');
     assert.match(text,new RegExp('-Edition '+edition));assert.match(text,/manage\.ps1/);assert.match(text,/pause/);
   }
 });
@@ -46,4 +46,20 @@ test('deployment reuses installed service and browser and stops on failed probes
 });
 test('connection settings reject shell syntax before SSH',{skip:process.platform!=='win32'},()=>{
   const result=run(fixture('settings'));assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(JSON.parse(result.stdout).rejected,true);
+});
+
+test('launchers work with LF and CRLF from another directory and preserve the edition',{skip:process.platform!=='win32'},()=>{
+  mkdirSync('work',{recursive:true});const base=mkdtempSync(resolve('work/launcher-encoding-'));
+  for(const lineEnding of ['lf','crlf']){
+    const root=join(base,lineEnding+' space & 中文 !');mkdirSync(join(root,'scripts'),{recursive:true});
+    writeFileSync(join(root,'scripts/manage.ps1'),String.fromCharCode(0xFEFF)+["param([string]$Edition,[string]$Action,[switch]$CheckOnly)","[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)","Write-Output ('CHECK-OK '+(@{edition=$Edition;action=$Action;check=[bool]$CheckOnly}|ConvertTo-Json -Compress))"].join(String.fromCharCode(10)));
+    for(const[folder,name,edition]of [['本地版','一键启动.cmd','local'],['服务器版','一键部署.cmd','server']]){
+      mkdirSync(join(root,folder),{recursive:true});const file=join(root,folder,name);const source=readFileSync(join(folder,name),'utf8');writeFileSync(file,lineEnding==='lf'?source.replaceAll(String.fromCharCode(13,10),String.fromCharCode(10)):source);
+      for(const flag of edition==='local'?['--check','--start','--menu']:['--check']){
+        const command='call '+String.fromCharCode(34)+file+String.fromCharCode(34)+' '+flag;
+        const result=spawnSync(shell,['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-Command','& '+quote(resolve(process.env.SystemRoot||'C:/Windows','System32/cmd.exe'))+' /d /c '+quote(command)+';exit $LASTEXITCODE'],{cwd:resolve(shell).slice(0,3),encoding:'utf8',windowsHide:true,timeout:15000});
+        assert.equal(result.status,0,result.stdout+result.stderr);const line=result.stdout.split(String.fromCharCode(10)).map(value=>value.trim()).find(value=>value.startsWith('CHECK-OK '));assert.ok(line,result.stdout+result.stderr);const actual=JSON.parse(line.slice(9));assert.equal(actual.edition,edition);assert.equal(actual.action,flag==='--menu'?'menu':'default');assert.equal(actual.check,flag==='--check');
+      }
+    }
+  }
 });
