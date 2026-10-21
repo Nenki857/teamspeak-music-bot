@@ -1,0 +1,66 @@
+{
+  "appId": "local.tsmusicdesk.app",
+  "productName": "TS Music Desk",
+  "directories": {
+    "app": "work/local/package-stage",
+    "output": "release/local",
+    "buildResources": "resources"
+  },
+  "electronDist": "node_modules/electron/dist",
+  "electronVersion": "44.7.0",
+  "asar": false,
+  "npmRebuild": false,
+  "files": [
+    "**/*",
+    "!vendor/**",
+    "!**/*.test.*",
+    "!**/*.map",
+    "!**/.git/**"
+  ],
+  "extraResources": [
+    {
+      "from": "work/local/package-stage/vendor",
+      "to": "app/vendor",
+      "filter": [
+        "**/*",
+        "!**/*.test.*",
+        "!**/*.map"
+      ]
+    }
+  ],
+  "compression": "normal",
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "resources/app.ico",
+    "artifactName": "TS-Music-Desk-${version}-${arch}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true,
+    "runAfterFinish": false,
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "resources/app.ico",
+    "uninstallerIcon": "resources/app.ico",
+    "installerLanguages": [
+      "zh_CN",
+      "en_US"
+    ]
+  }
+}

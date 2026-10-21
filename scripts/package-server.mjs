@@ -1,0 +1,31 @@
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { writeServerIcons } from './server-icons.mjs';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+if (!existsSync(resolve(root, 'dist/server-ui/index.html'))) throw new Error('请先执行 npm run build:server');
+mkdirSync(resolve(root, 'work/server'), { recursive: true });
+const stage = mkdtempSync(resolve(root, 'work/server/package-'));
+const copy = (source, target = source, filter) => cpSync(resolve(root, source), resolve(stage, target), { recursive: true, filter });
+for (const source of ['LICENSE', 'THIRD-PARTY-NOTICES.txt', 'src/server', 'src/worker', 'src/shared', 'deploy', 'package-lock.json', 'vendor/teamspeak-music-bot-1.13.2/package.json', 'vendor/teamspeak-music-bot-1.13.2/package-lock.json', 'vendor/teamspeak-music-bot-1.13.2/LICENSE', 'vendor/teamspeak-music-bot-1.13.2/src']) copy(source);
+copy('dist/server-ui', 'dist/ui');
+await writeServerIcons(resolve(stage, 'dist/ui'), resolve(root, 'resources/logo-source.png'));
+copy('vendor/teamspeak-music-bot-1.13.2/dist', undefined, path => !/\.test\.|\.map$|\.d\.ts$/.test(path));
+copy('docs/Ubuntu服务器部署.md', 'README.md');
+copy('docs/官方客户端链路试用与回退.md', '官方客户端链路试用与回退.md');
+copy('scripts/migrate-server-library.mjs');
+copy('scripts/diagnose-server-audio.mjs');
+writeFileSync(resolve(stage, 'package.json'), JSON.stringify({ ...pkg, main: 'src/server/entry.mjs', scripts: { start: 'node src/server/entry.mjs' } }, null, 2));
+writeFileSync(resolve(stage, 'server-manifest.json'), JSON.stringify({ version: pkg.version, platform: 'linux', arch: 'x64', audioCore: 'existing-1.13.2', privateDataIncluded: false, dependenciesInstalledOnTarget: true }, null, 2));
+// Explicit allowlist above: databases, keys, accounts, local runtimes and logs
+// never enter the server distribution.
+for (const name of ['data', 'server-data', '.env', '.npmrc', 'node_modules', 'resources', 'src/desktop']) if (existsSync(resolve(stage, name))) throw new Error('发行目录混入本机数据或二进制');
+mkdirSync(resolve(root, 'release/server'), { recursive: true });
+const output = resolve(root, `release/server/TS-Music-Desk-Server-${pkg.version}.tar.gz`);
+const result = spawnSync('tar', ['-czf', output, '-C', stage, '.'], { stdio: 'inherit', windowsHide: true });
+if (result.status !== 0) throw new Error('服务器发行包压缩失败');
+writeFileSync(output + '.sha256', createHash('sha256').update(readFileSync(output)).digest('hex') + '\n');
+console.log(`服务器源码发行包：${output}`);

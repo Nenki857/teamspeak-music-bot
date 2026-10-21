@@ -1,0 +1,14 @@
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { resolve, relative } from 'node:path';
+import { spawnSync } from 'node:child_process';
+mkdirSync('archives',{recursive:true});mkdirSync('work',{recursive:true});
+const stamp=new Date().toISOString().replace(/[:.]/g,'-'),stage=mkdtempSync(resolve('work/audio-archive-'));
+for(const name of ['src','tests','scripts','deploy','docs','public','dist/ui','package.json','package-lock.json','README.md','vite.config.mjs','index.html','electron-builder.json'])cpSync(name,resolve(stage,name),{recursive:true});
+for(const name of ['src','dist','package.json','package-lock.json','LICENSE'])cpSync(resolve('vendor/teamspeak-music-bot-1.13.2',name),resolve(stage,'vendor/teamspeak-music-bot-1.13.2',name),{recursive:true});
+for(const name of readdirSync('.').filter(name=>name.endsWith('.cmd')))cpSync(name,resolve(stage,name));
+const files={};function walk(dir){for(const name of readdirSync(dir)){const file=resolve(dir,name);if(statSync(file).isDirectory())walk(file);else files[relative(stage,file).replaceAll('\\','/')]=createHash('sha256').update(readFileSync(file)).digest('hex');}}walk(stage);
+writeFileSync(resolve(stage,'AUDIO-CHAIN-ARCHIVE.json'),JSON.stringify({createdAt:new Date().toISOString(),backend:'original-custom-ts3-protocol',version:JSON.parse(readFileSync('package.json')).version,privateDataIncluded:false,dependencies:'Reinstall from both included lockfiles. Runtime binaries and node_modules are excluded.',files},null,2));
+const output=resolve(`archives/TS-Music-Desk-original-chain-${stamp}.tar.gz`);const r=spawnSync('tar',['-czf',output,'-C',stage,'.'],{stdio:'inherit',windowsHide:true});if(r.status!==0)throw Error('Archive failed');
+const digest=createHash('sha256').update(readFileSync(output)).digest('hex');writeFileSync(output+'.sha256',digest+'  '+relative(resolve('archives'),output)+'\n');
+writeFileSync('archives/original-chain-latest.json',JSON.stringify({archive:output,sha256:digest,files:Object.keys(files).length},null,2));console.log(JSON.stringify({archive:output,sha256:digest,files:Object.keys(files).length}));

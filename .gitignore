@@ -1,0 +1,73 @@
+# Only include the project files listed below.
+/*
+!/.gitignore
+!/.gitattributes
+!/.npmrc
+!/README.md
+!/LICENSE
+!/THIRD-PARTY-NOTICES.txt
+!/package.json
+!/package-lock.json
+!/electron-builder.json
+!/index.html
+!/vite.config.mjs
+!/src/
+!/public/
+!/scripts/
+!/deploy/
+!/docs/
+!/tests/
+!/resources/
+!/vendor/
+!/本地版/
+!/服务器版/
+
+# Dependencies, generated files and runtime data.
+**/node_modules/
+**/dist/
+/data/
+/server-data/
+/runtime/
+/work/
+/release/
+/archives/
+resources/node/
+*.exe
+*.zip
+*.tar.gz
+*.log
+
+# Login information and private keys.
+.env
+.env.*
+!.env.example
+*.key
+id_rsa
+id_ed25519
+known_hosts
+known_hosts.old
+*.pem
+*.pfx
+*.p12
+*.db
+*.db-*
+*.sqlite*
+# The core src/data directory contains code, not user data.
+/vendor/teamspeak-music-bot-1.13.2/data/
+
+# Publish only the current user documentation, not historical work notes.
+/docs/*
+!/docs/使用说明.txt
+!/docs/Ubuntu服务器部署.md
+!/docs/官方客户端链路试用与回退.md
+!/docs/公开发布说明.md
+
+# Upstream planning notes, CI and development-only helper tools.
+/vendor/teamspeak-music-bot-1.13.2/docs/
+/vendor/teamspeak-music-bot-1.13.2/.github/
+/vendor/teamspeak-music-bot-1.13.2/README.md
+/vendor/teamspeak-music-bot-1.13.2/pr57.diff
+/vendor/teamspeak-music-bot-1.13.2/test-*
+/vendor/teamspeak-music-bot-1.13.2/scripts/test_*
+/vendor/teamspeak-music-bot-1.13.2/scripts/smoke_*
+/vendor/teamspeak-music-bot-1.13.2/scripts/screenshot_*

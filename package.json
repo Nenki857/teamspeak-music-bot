@@ -1,0 +1,38 @@
+{
+  "name": "teamspeak-music-desk",
+  "version": "1.2.1",
+  "description": "本地 TeamSpeak 音乐机器人与授权共享控制",
+  "private": true,
+  "type": "module",
+  "main": "src/desktop/main.mjs",
+  "scripts": {
+    "build": "node scripts/build-core.mjs && vite build",
+    "start": "electron .",
+    "dev": "npm run build && npm start",
+    "test": "node --test tests/*.test.mjs",
+    "icons": "node scripts/create-icon.mjs",
+    "package:prepare": "node scripts/prepare-package.mjs",
+    "package:win": "npm run icons && npm run build && npm test && npm run package:prepare && node scripts/package-windows.mjs && node scripts/check-package.mjs",
+    "package:licenses": "node scripts/collect-runtime-licenses.mjs",
+    "build:local": "node scripts/build-core.mjs && vite build",
+    "build:server": "node scripts/build-core.mjs && vite build --mode server",
+    "package:server": "npm run build:server && node scripts/package-server.mjs && node scripts/check-server-package.mjs && node scripts/package-server-update.mjs && node scripts/check-server-update.mjs",
+    "manage:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage.ps1 -Edition local -Action menu",
+    "manage:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage.ps1 -Edition server -Action menu"
+  },
+  "dependencies": {
+    "koffi": "3.3.3",
+    "qrcode": "1.5.4",
+    "vue": "3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.64.0",
+    "png-to-ico": "3.0.2",
+    "vite": "6.3.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,41 @@
+TS Music Desk — Third-party notices
+
+Project code: MIT; see LICENSE. The project license does not relicense
+third-party code, libraries, trademarks, music, or account content.
+
+1. Bundled source core
+   teamspeak-music-bot 1.13.2
+   Copyright (c) 2026 TSMusicBot Contributors
+   Source: https://github.com/ZHANGTIANYAO1/teamspeak-music-bot
+   License: MIT. Original notice retained at
+   vendor/teamspeak-music-bot-1.13.2/LICENSE.
+
+2. Dependency licenses
+   npm dependencies retain their respective licenses. Windows packaging
+   generates THIRD-PARTY-DEPENDENCIES.txt from the installed runtime packages.
+   Electron includes its own LICENSE and LICENSES.chromium.html files.
+   Node.js and Cloudflared notices are retained under resources/licenses/.
+   This summary does not replace those notices.
+
+3. FFmpeg — binary redistribution not yet cleared
+   The existing Windows package includes FFmpeg 6.1.1 from ffmpeg-static,
+   built with --enable-gpl --enable-version3. See resources/licenses/
+   FFmpeg-6.1.1-LICENSE.txt and FFmpeg-version-and-source.txt.
+   A complete corresponding source set for that exact binary, including
+   enabled external libraries and build instructions, is not supplied here.
+   Merely supplying a source tag link is not a complete compliance solution.
+   Do not treat this source cleanup as clearance to publicly redistribute
+   the existing Windows EXE/ZIP. Resolve the corresponding-source provision
+   or change the distribution design before publishing binary assets.
+   This source repository contains no FFmpeg executables or music files.
+   Official information: https://ffmpeg.org/legal.html
+
+4. Optional server components
+   SinusBot and the official TeamSpeak client are independent components.
+   The server setup obtains them separately; their terms remain applicable.
+   This project does not grant rights to repackage their binaries or branding.
+
+5. Music services
+   TS Music Desk is a community project, not an official NetEase, TeamSpeak
+   or SinusBot product. Music and service accounts retain their owners' rights.
+   Use your own authorized account and comply with the relevant service terms.

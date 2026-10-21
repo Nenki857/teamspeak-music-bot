@@ -1,0 +1,25 @@
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, lstatSync } from 'node:fs';
+import { resolve, relative } from 'node:path';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { writeServerIcons } from './server-icons.mjs';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+const version = JSON.parse(readFileSync(resolve(root,'package.json'))).version;
+mkdirSync(resolve(root,'work/server'),{recursive:true}); mkdirSync(resolve(root,'release/server'),{recursive:true});
+const stage = mkdtempSync(resolve(root,'work/server/update-'));
+for (const tree of ['src/server','src/worker','src/shared']) cpSync(resolve(root,tree),resolve(stage,tree),{recursive:true});
+cpSync(resolve(root,'dist/server-ui'),resolve(stage,'dist/ui'),{recursive:true});
+cpSync(resolve(root,'vendor/teamspeak-music-bot-1.13.2/dist'),resolve(stage,'vendor/teamspeak-music-bot-1.13.2/dist'),{recursive:true,filter:path=>! /\.test\.|\.map$|\.d\.ts$/.test(path)});
+await writeServerIcons(resolve(stage, 'dist/ui'), resolve(root, 'resources/logo-source.png'));
+const files = {};
+function walk(dir) { for (const item of readdirSync(dir,{withFileTypes:true})) { const path=resolve(dir,item.name); if(lstatSync(path).isSymbolicLink())throw Error('更新包不能包含符号链接'); if(item.isDirectory())walk(path); else files[relative(stage,path).replaceAll('\\','/')]=hash(path); } }
+walk(stage);
+const manifest = {version,kind:'tsmd-code-update',files,dependencies:Object.fromEntries(['package-lock.json','vendor/teamspeak-music-bot-1.13.2/package-lock.json'].map(name=>[name,hash(resolve(root,name))]))};
+writeFileSync(resolve(stage,'update-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+const archive=resolve(root,`release/server/TS-Music-Desk-Server-${version}-update.tar.gz`);
+const result=spawnSync('tar',['-czf',archive,'-C',stage,'.'],{stdio:'inherit',windowsHide:true});
+if(result.status!==0)throw Error('小更新包压缩失败');
+writeFileSync(archive+'.sha256',hash(archive)+'  '+relative(resolve(root,'release/server'),archive)+'\n');
+console.log(`服务器小更新包：${archive}（${Object.keys(files).length} 个代码与界面文件，不含数据或运行环境）`);

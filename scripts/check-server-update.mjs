@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, readdirSync, lstatSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+const version=JSON.parse(readFileSync('package.json')).version;
+const archive=resolve(`release/server/TS-Music-Desk-Server-${version}-update.tar.gz`),stage=mkdtempSync(resolve('work/update-check-'));
+const hash=path=>createHash('sha256').update(readFileSync(path)).digest('hex');
+assert.equal(readFileSync(archive+'.sha256','utf8').split(' ')[0],hash(archive));
+const extracted=spawnSync('tar',['-xzf',archive,'-C',stage],{encoding:'utf8',windowsHide:true}); assert.equal(extracted.status,0,extracted.stderr);
+const m=JSON.parse(readFileSync(resolve(stage,'update-manifest.json'))); assert.equal(m.kind,'tsmd-code-update'); assert.equal(m.version,version);
+for(const[name,digest]of Object.entries(m.dependencies))assert.equal(hash(resolve(name)),digest);
+let count=0;
+function walk(dir,prefix=''){for(const entry of readdirSync(dir,{withFileTypes:true})){const path=resolve(dir,entry.name),name=prefix+entry.name;assert.equal(lstatSync(path).isSymbolicLink(),false);if(entry.isDirectory()){walk(path,name+'/');continue;}if(name==='update-manifest.json')continue;assert.match(name,/^(src\/(server|worker|shared)|dist\/ui|vendor\/teamspeak-music-bot-1\.13\.2\/dist)\//);assert.doesNotMatch(name,/(^|\/)(app\.db|core\.db|server-admin\.json|.*\.key|\.env)$|\.(exe|dll|node|log)$/i);assert.equal(hash(path),m.files[name]);count++;}}
+assert.ok(m.files['vendor/teamspeak-music-bot-1.13.2/dist/audio/player.js'],'Missing current audio core');
+walk(stage);assert.equal(count,Object.keys(m.files).length);
+for(const name of ['src/server/admin-auth.mjs','src/worker/share-server.mjs','src/server/official-core-engine.mjs','src/server/sinusbot-api.mjs','src/server/configure-official-transport.mjs','dist/ui/index.html'])assert.ok(m.files[name]);
+assert.ok(m.files['src/worker/web-delivery.mjs']);
+assert.ok(statSync(resolve(stage,'dist/ui/logo.png')).size<64*1024,'Server Logo is oversized');
+assert.ok(statSync(resolve(stage,'dist/ui/favicon.ico')).size<8*1024,'Server favicon is oversized');
+const assets=readdirSync(resolve(stage,'dist/ui/assets')).filter(name=>name.endsWith('.js')).map(name=>readFileSync(resolve(stage,'dist/ui/assets',name),'utf8')).join('\n');
+for(const text of ['当前主人密码','当前主人控制台地址','我的音乐库','request-name-hint'])assert.ok(assets.includes(text),`Built UI missing ${text}`);
+console.log(`Small server update verified: ${count} files, ${(statSync(archive).size/1024/1024).toFixed(2)} MiB; code/UI only; dependency hashes match.`);

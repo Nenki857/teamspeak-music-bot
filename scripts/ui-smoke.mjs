@@ -1,0 +1,40 @@
+import { _electron as electron } from 'playwright';
+import { resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
+import koffi from 'koffi';
+// Diagnostics must never produce native crash dialogs on the user's desktop.
+koffi.load('kernel32.dll').func('uint32 __stdcall SetErrorMode(uint32)')(0x8003);
+const root = resolve('.'); const data = resolve('work/ui-test-' + randomUUID()); mkdirSync(data, { recursive: true });
+const env = { ...process.env, TSMD_DATA_DIR: data, TSMD_HEADLESS_CHECK: '1', TSMD_TEST_KEY: randomBytes(32).toString('base64') }; delete env.ELECTRON_RUN_AS_NODE;
+const application = await electron.launch({ executablePath: resolve('node_modules/electron/dist/electron.exe'), args: [root], env, timeout: 30000 });
+console.log('Desktop bootstrap:', JSON.stringify(await application.evaluate(({ app, BrowserWindow }) => ({ ready: app.isReady(), name: app.getName(), windows: BrowserWindow.getAllWindows().map(w => ({ url: w.webContents.getURL(), loading: w.webContents.isLoading(), pid: w.webContents.getOSProcessId() })) }))));
+const page = await application.firstWindow({ timeout: 10000 }).catch(async error => { await application.close(); throw error; }); const errors = [];
+page.on('pageerror', error => errors.push(error.message));
+try {
+  await page.getByText('机器人未启动', { exact: true }).first().waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: '+ 添加第一个服务器', exact: true }).click();
+  await page.getByLabel('预设名称', { exact: true }).fill('UI 检查预设');
+  await page.getByLabel('服务器地址', { exact: true }).fill('ts.example.com:9987');
+  await page.getByLabel('目标频道 ID', { exact: true }).fill('42');
+  await page.getByRole('button', { name: '保存预设', exact: true }).click();
+  await page.getByText('UI 检查预设', { exact: true }).first().waitFor();
+  assert.equal(await page.evaluate(() => window.musicDesk.rpc('status').then(s => s.presets.length)), 1);
+  await page.screenshot({ path: resolve('work/ui-home.png'), fullPage: true });
+  await page.getByRole('button', { name: '♫音乐与歌单', exact: true }).click();
+  await page.getByRole('button', { name: '↗分享控制', exact: true }).click();
+  await page.getByRole('heading', { name: '让朋友加入你的播放台' }).waitFor();
+  await page.screenshot({ path: resolve('work/ui-sharing.png'), fullPage: true });
+  await page.getByRole('button', { name: '⚙设置与状态', exact: true }).click();
+  await page.getByRole('heading', { name: '设置与运行状态' }).waitFor();
+  const auth = await page.evaluate(() => window.musicDesk.rpc('status').then(s => ({ ready: s.ready, phase: s.phase, auth: s.auth.loggedIn })));
+  assert.equal(auth.ready, true); assert.equal(auth.auth, false);
+  const live = await page.evaluate(async () => { const results = {}; try { const search = await window.musicDesk.rpc('music.search', { query: '晴天' }); results.searchSongs = search.songs.length; } catch (e) { results.searchError = e.message; } try { const qr = await window.musicDesk.rpc('auth.qr'); results.qrAvailable = !!(qr.qrImg && qr.qrUrl); } catch (e) { results.qrError = e.message; } return results; });
+  console.log('Live music API:', JSON.stringify(live));
+  await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);
+  await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
+  assert.deepEqual(errors, []);
+  console.log('UI smoke passed: saved preset, all pages, native IPC, tray behavior.');
+} finally { await application.evaluate(({ app }) => app.quit()); await application.close(); }

@@ -1,0 +1,720 @@
+import Database from "better-sqlite3";
+import { CAPABILITIES, BOTS_ALL } from "./permissions.js";
+import { GUEST_USER_ID, GUEST_USERNAME } from "./users.js";
+import type { QueuedSong } from "../audio/queue.js";
+
+/**
+ * Reserved owner id for chat-saved / opt-in-shared queues. A `__`-bracketed
+ * literal can never collide with a real WebUI user id (UUIDs), so it cleanly
+ * partitions "shared" saved queues from per-user private ones (issue #119).
+ */
+export const SHARED_QUEUE_OWNER = "__shared__";
+/** Cap per owner (private user OR the shared bucket). */
+export const MAX_SAVED_QUEUES = 50;
+/** Cap per saved queue / persisted live-queue snapshot. */
+export const MAX_QUEUE_SONGS = 1000;
+
+/** A stored song is a QueuedSong minus the lazily-resolved `url`. */
+export type StoredSong = Omit<QueuedSong, "url">;
+
+/** Saved-queue row without the (potentially large) songs blob — for list views. */
+export interface SavedQueueMeta {
+  id: number;
+  ownerId: string;
+  name: string;
+  songCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Full saved queue, including its songs. */
+export interface SavedQueue extends SavedQueueMeta {
+  songs: StoredSong[];
+}
+
+/** One-row-per-bot persisted live-queue state (Feature 2, auto-restore). */
+export interface QueueStateRow {
+  botId: string;
+  songs: StoredSong[];
+  currentIndex: number;
+  mode: string;
+  isFmMode: boolean;
+  fmPlatform: string;
+}
+
+export interface PlayHistoryEntry {
+  botId: string;
+  songId: string;
+  songName: string;
+  artist: string;
+  album: string;
+  platform: "netease" | "qq" | "bilibili" | "youtube" | "local" | "kugou" | "spotify" | "jellyfin";
+  coverUrl: string;
+  requestedBy?: string;
+}
+
+export interface PlayHistoryRecord extends PlayHistoryEntry {
+  id: number;
+  playedAt: string;
+}
+
+export interface BotInstance {
+  id: string;
+  name: string;
+  serverAddress: string;
+  serverPort: number;
+  nickname: string;
+  defaultChannel: string;
+  channelId: string;
+  channelPassword: string;
+  autoStart: boolean;
+  /** "ts3" | "ts6" | "" (empty = auto-detect) */
+  serverProtocol: string;
+  /** API key for TS6 HTTP Query */
+  ts6ApiKey: string;
+  /** Password to join the TS server (server password) */
+  serverPassword: string;
+  identity?: string;
+}
+
+export interface ProfileConfig {
+  avatarEnabled: boolean;
+  descriptionEnabled: boolean;
+  nicknameEnabled: boolean;
+  awayStatusEnabled: boolean;
+  channelDescEnabled: boolean;
+  nowPlayingMsgEnabled: boolean;
+}
+
+export const DEFAULT_PROFILE_CONFIG: ProfileConfig = {
+  avatarEnabled: true,
+  descriptionEnabled: true,
+  nicknameEnabled: true,
+  awayStatusEnabled: true,
+  channelDescEnabled: true,
+  nowPlayingMsgEnabled: true,
+};
+
+/**
+ * Per-bot player settings persisted across restarts (#125): the playback volume
+ * and play mode. These reset to defaults on process restart when kept only in
+ * memory (AudioPlayer/PlayQueue), so they are stored on the bot_instances row —
+ * exactly like the per-bot profile flags — and restored when the bot is (re)built.
+ */
+export interface PlayerSettings {
+  /** 0-100. */
+  volume: number;
+  /** PlayMode string: "loop" | "single" | "random" (also accepts legacy saved modes). */
+  playMode: string;
+}
+
+const PLAY_MODES = new Set(["seq", "loop", "single", "random", "rloop"]);
+
+export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
+  volume: 75,
+  playMode: "loop",
+};
+
+export interface FavoritePlaylist {
+  id: number;
+  userId: string;
+  platform: string;
+  playlistId: string;
+  name: string;
+  coverUrl: string;
+  songCount: number;
+  createdAt: string;
+}
+
+export interface BotDatabase {
+  db: Database.Database;
+  addPlayHistory(entry: PlayHistoryEntry): void;
+  getPlayHistory(botId: string, limit: number): PlayHistoryRecord[];
+  saveBotInstance(instance: BotInstance): void;
+  getBotInstances(): BotInstance[];
+  deleteBotInstance(id: string): boolean;
+  getProfileConfig(botId: string): ProfileConfig;
+  saveProfileConfig(botId: string, config: ProfileConfig): void;
+  getPlayerSettings(botId: string): PlayerSettings;
+  saveVolume(botId: string, volume: number): void;
+  savePlayMode(botId: string, playMode: string): void;
+  getCustomAvatarPath(botId: string): string | null;
+  setCustomAvatarPath(botId: string, path: string | null): void;
+  addFavorite(userId: string, playlist: { platform: string; playlistId: string; name: string; coverUrl: string; songCount: number }): void;
+  removeFavorite(userId: string, playlistId: string, platform: string): boolean;
+  getFavorites(userId: string): FavoritePlaylist[];
+  isFavorited(userId: string, playlistId: string, platform: string): boolean;
+  // Saved queues (Feature 1) — upsert by (ownerId, name), capped.
+  saveQueue(ownerId: string, name: string, songs: StoredSong[]): SavedQueue;
+  listSavedQueues(ownerId: string, includeShared: boolean): SavedQueueMeta[];
+  getSavedQueue(id: number): SavedQueue | null;
+  deleteSavedQueue(id: number): boolean;
+  // Live-queue persistence (Feature 2) — one row per bot.
+  saveQueueState(state: QueueStateRow): void;
+  getQueueState(botId: string): QueueStateRow | null;
+  clearQueueState(botId: string): void;
+  close(): void;
+}
+
+function migrateSchema(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(bot_instances)").all() as Array<{ name: string }>;
+  const names = columns.map((c) => c.name);
+  if (!names.includes("identity")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN identity TEXT");
+  }
+  if (!names.includes("serverProtocol")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN serverProtocol TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.includes("ts6ApiKey")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN ts6ApiKey TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.includes("serverPassword")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN serverPassword TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.includes("channelId")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN channelId TEXT NOT NULL DEFAULT ''");
+  }
+  // Profile feature flags
+  const profileCols = [
+    "profile_avatar_enabled",
+    "profile_description_enabled",
+    "profile_nickname_enabled",
+    "profile_away_enabled",
+    "profile_channel_desc_enabled",
+    "profile_now_playing_enabled",
+  ];
+  for (const col of profileCols) {
+    if (!names.includes(col)) {
+      db.exec(`ALTER TABLE bot_instances ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 1`);
+    }
+  }
+  if (!names.includes("custom_avatar_path")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN custom_avatar_path TEXT");
+  }
+  // Per-bot persisted player settings (#125): volume + play mode. Defaults match
+  // AudioPlayer/PlayQueue's in-memory defaults so pre-existing rows keep behaving
+  // exactly as before until the user changes them.
+  if (!names.includes("volume")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN volume INTEGER NOT NULL DEFAULT 75");
+  }
+  if (!names.includes("play_mode")) {
+    db.exec("ALTER TABLE bot_instances ADD COLUMN play_mode TEXT NOT NULL DEFAULT 'seq'");
+  }
+
+  const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  const userColNames = userColumns.map((c) => c.name);
+  if (!userColNames.includes("role")) {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'");
+  }
+
+  const historyColumns = db.prepare("PRAGMA table_info(play_history)").all() as Array<{ name: string }>;
+  const historyColNames = historyColumns.map((c) => c.name);
+  if (!historyColNames.includes("requestedBy")) {
+    db.exec("ALTER TABLE play_history ADD COLUMN requestedBy TEXT NOT NULL DEFAULT ''");
+  }
+}
+
+function initTables(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS play_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      botId TEXT NOT NULL,
+      songId TEXT NOT NULL,
+      songName TEXT NOT NULL,
+      artist TEXT NOT NULL,
+      album TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      coverUrl TEXT NOT NULL,
+      requestedBy TEXT NOT NULL DEFAULT '',
+      playedAt TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS bot_instances (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      serverAddress TEXT NOT NULL,
+      serverPort INTEGER NOT NULL,
+      nickname TEXT NOT NULL,
+      defaultChannel TEXT NOT NULL,
+      channelId TEXT NOT NULL DEFAULT '',
+      channelPassword TEXT NOT NULL,
+      autoStart INTEGER NOT NULL DEFAULT 0,
+      serverProtocol TEXT NOT NULL DEFAULT '',
+      ts6ApiKey TEXT NOT NULL DEFAULT '',
+      serverPassword TEXT NOT NULL DEFAULT '',
+      volume INTEGER NOT NULL DEFAULT 75,
+      play_mode TEXT NOT NULL DEFAULT 'seq',
+      identity TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      passwordHash TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin'
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      expiresAt INTEGER NOT NULL,
+      lastSeenAt INTEGER NOT NULL,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt);
+
+    CREATE TABLE IF NOT EXISTS user_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp INTEGER NOT NULL,
+      actorId TEXT,
+      actorUsername TEXT,
+      targetUserId TEXT,
+      targetUsername TEXT,
+      action TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_audit_timestamp ON user_audit(timestamp DESC);
+
+    CREATE TABLE IF NOT EXISTS favorite_playlists (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      playlistId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      coverUrl TEXT NOT NULL DEFAULT '',
+      songCount INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(userId, platform, playlistId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_favorites_userId ON favorite_playlists(userId);
+
+    CREATE TABLE IF NOT EXISTS user_permissions (
+      userId     TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      PRIMARY KEY (userId, permission),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS user_bot_access (
+      userId TEXT NOT NULL,
+      botId  TEXT NOT NULL,
+      PRIMARY KEY (userId, botId),
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_bot_access_userId ON user_bot_access(userId);
+
+    CREATE TABLE IF NOT EXISTS saved_queues (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      ownerId   TEXT NOT NULL,
+      name      TEXT NOT NULL,
+      songs     TEXT NOT NULL,
+      songCount INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(ownerId, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_saved_queues_ownerId ON saved_queues(ownerId);
+
+    CREATE TABLE IF NOT EXISTS queue_state (
+      botId        TEXT PRIMARY KEY,
+      songs        TEXT NOT NULL,
+      currentIndex INTEGER NOT NULL,
+      mode         TEXT NOT NULL,
+      isFmMode     INTEGER NOT NULL DEFAULT 0,
+      fmPlatform   TEXT NOT NULL DEFAULT '',
+      updatedAt    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+}
+
+/**
+ * One-time backfill: existing `member` users created before the
+ * account-permissions feature are granted full access (all 5 capabilities +
+ * the `bots.all` marker), exactly once per database. Admins are skipped (they
+ * bypass permission checks). New members created after this runs are not
+ * affected — they get the basic tier via POST /api/users. A marker row in
+ * `schema_meta` makes this idempotent.
+ */
+export function backfillMemberPermissions(db: Database.Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT)`);
+  const done = db.prepare("SELECT value FROM schema_meta WHERE key = 'perm_backfill_done'").get();
+  if (done) return;
+  const members = db.prepare("SELECT id FROM users WHERE role = 'member'").all() as { id: string }[];
+  const insCap = db.prepare("INSERT OR IGNORE INTO user_permissions (userId, permission) VALUES (?, ?)");
+  const tokens = [...CAPABILITIES, BOTS_ALL];
+  const tx = db.transaction(() => {
+    for (const m of members) {
+      for (const t of tokens) insCap.run(m.id, t);
+    }
+    db.prepare("INSERT INTO schema_meta (key, value) VALUES ('perm_backfill_done', ?)").run(String(members.length));
+  });
+  tx();
+}
+
+/**
+ * Ensure the reserved guest principal exists. Idempotent via the PK on
+ * `users.id`. This row only backs login-less guest sessions; it is excluded
+ * from countUsers()/listUsers() so it never interferes with first-run setup
+ * or the user-management UI, and holds an unusable password hash.
+ */
+export function ensureGuestUser(db: Database.Database): void {
+  const now = Date.now();
+  db.prepare(
+    "INSERT OR IGNORE INTO users (id, username, passwordHash, createdAt, updatedAt, role) VALUES (?, ?, '!', ?, ?, 'guest')"
+  ).run(GUEST_USER_ID, GUEST_USERNAME, now, now);
+}
+
+export function createDatabase(dbPath: string): BotDatabase {
+  const db = new Database(dbPath);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  initTables(db);
+  migrateSchema(db);
+  backfillMemberPermissions(db);
+  ensureGuestUser(db);
+
+  const insertHistory = db.prepare(`
+    INSERT INTO play_history (botId, songId, songName, artist, album, platform, coverUrl, requestedBy)
+    VALUES (@botId, @songId, @songName, @artist, @album, @platform, @coverUrl, @requestedBy)
+  `);
+
+  const selectHistory = db.prepare(`
+    SELECT * FROM play_history WHERE botId = ? ORDER BY id DESC LIMIT ?
+  `);
+
+  const upsertInstance = db.prepare(`
+    INSERT INTO bot_instances (id, name, serverAddress, serverPort, nickname, defaultChannel, channelId, channelPassword, autoStart, serverProtocol, ts6ApiKey, serverPassword, identity)
+    VALUES (@id, @name, @serverAddress, @serverPort, @nickname, @defaultChannel, @channelId, @channelPassword, @autoStart, @serverProtocol, @ts6ApiKey, @serverPassword, @identity)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      serverAddress = excluded.serverAddress,
+      serverPort = excluded.serverPort,
+      nickname = excluded.nickname,
+      defaultChannel = excluded.defaultChannel,
+      channelId = excluded.channelId,
+      channelPassword = excluded.channelPassword,
+      autoStart = excluded.autoStart,
+      serverProtocol = excluded.serverProtocol,
+      ts6ApiKey = excluded.ts6ApiKey,
+      serverPassword = excluded.serverPassword,
+      identity = excluded.identity
+  `);
+
+  const selectInstances = db.prepare(`SELECT * FROM bot_instances`);
+
+  const deleteInstance = db.prepare(`DELETE FROM bot_instances WHERE id = ?`);
+
+  const selectProfileConfig = db.prepare(`
+    SELECT profile_avatar_enabled, profile_description_enabled,
+           profile_nickname_enabled, profile_away_enabled,
+           profile_channel_desc_enabled, profile_now_playing_enabled
+    FROM bot_instances WHERE id = ?
+  `);
+
+  const updateProfileConfig = db.prepare(`
+    UPDATE bot_instances SET
+      profile_avatar_enabled = @avatar,
+      profile_description_enabled = @description,
+      profile_nickname_enabled = @nickname,
+      profile_away_enabled = @away,
+      profile_channel_desc_enabled = @channelDesc,
+      profile_now_playing_enabled = @nowPlaying
+    WHERE id = @id
+  `);
+
+  const selectPlayerSettings = db.prepare(
+    `SELECT volume, play_mode FROM bot_instances WHERE id = ?`,
+  );
+  const updateVolume = db.prepare(`UPDATE bot_instances SET volume = ? WHERE id = ?`);
+  const updatePlayMode = db.prepare(`UPDATE bot_instances SET play_mode = ? WHERE id = ?`);
+
+  const selectCustomAvatar = db.prepare(`SELECT custom_avatar_path FROM bot_instances WHERE id = ?`);
+  const updateCustomAvatar = db.prepare(`UPDATE bot_instances SET custom_avatar_path = ? WHERE id = ?`);
+
+  const insertFavorite = db.prepare(`
+    INSERT INTO favorite_playlists (userId, platform, playlistId, name, coverUrl, songCount)
+    VALUES (@userId, @platform, @playlistId, @name, @coverUrl, @songCount)
+  `);
+
+  const deleteFavorite = db.prepare(`
+    DELETE FROM favorite_playlists WHERE userId = ? AND playlistId = ? AND platform = ?
+  `);
+
+  const selectFavorites = db.prepare(`
+    SELECT id, userId, platform, playlistId, name, coverUrl, songCount, createdAt
+    FROM favorite_playlists WHERE userId = ? ORDER BY createdAt DESC
+  `);
+
+  const checkFavorited = db.prepare(`
+    SELECT 1 FROM favorite_playlists WHERE userId = ? AND playlistId = ? AND platform = ?
+  `);
+
+  // A corrupt/hand-edited songs blob must never throw into a route or the
+  // restore path — degrade to an empty list instead.
+  const parseSongs = (raw: string): StoredSong[] => {
+    try {
+      const v = JSON.parse(raw);
+      return Array.isArray(v) ? (v as StoredSong[]) : [];
+    } catch {
+      return [];
+    }
+  };
+  const rowToSavedMeta = (r: {
+    id: number; ownerId: string; name: string; songCount: number; createdAt: string; updatedAt: string;
+  }): SavedQueueMeta => ({
+    id: r.id,
+    ownerId: r.ownerId,
+    name: r.name,
+    songCount: r.songCount,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  });
+
+  const upsertSavedQueue = db.prepare(`
+    INSERT INTO saved_queues (ownerId, name, songs, songCount)
+    VALUES (@ownerId, @name, @songs, @songCount)
+    ON CONFLICT(ownerId, name) DO UPDATE SET
+      songs = excluded.songs,
+      songCount = excluded.songCount,
+      updatedAt = datetime('now')
+  `);
+  const selectSavedQueueByOwnerName = db.prepare(
+    "SELECT * FROM saved_queues WHERE ownerId = ? AND name = ?",
+  );
+  const selectSavedQueueIdByOwnerName = db.prepare(
+    "SELECT id FROM saved_queues WHERE ownerId = ? AND name = ?",
+  );
+  const countSavedQueues = db.prepare(
+    "SELECT COUNT(*) AS c FROM saved_queues WHERE ownerId = ?",
+  );
+  const listSavedQueuesOwn = db.prepare(
+    "SELECT id, ownerId, name, songCount, createdAt, updatedAt FROM saved_queues WHERE ownerId = ? ORDER BY updatedAt DESC",
+  );
+  const listSavedQueuesShared = db.prepare(
+    "SELECT id, ownerId, name, songCount, createdAt, updatedAt FROM saved_queues WHERE ownerId = ? OR ownerId = ? ORDER BY updatedAt DESC",
+  );
+  const selectSavedQueueById = db.prepare("SELECT * FROM saved_queues WHERE id = ?");
+  const deleteSavedQueueById = db.prepare("DELETE FROM saved_queues WHERE id = ?");
+
+  const upsertQueueState = db.prepare(`
+    INSERT INTO queue_state (botId, songs, currentIndex, mode, isFmMode, fmPlatform, updatedAt)
+    VALUES (@botId, @songs, @currentIndex, @mode, @isFmMode, @fmPlatform, datetime('now'))
+    ON CONFLICT(botId) DO UPDATE SET
+      songs = excluded.songs,
+      currentIndex = excluded.currentIndex,
+      mode = excluded.mode,
+      isFmMode = excluded.isFmMode,
+      fmPlatform = excluded.fmPlatform,
+      updatedAt = datetime('now')
+  `);
+  const selectQueueState = db.prepare("SELECT * FROM queue_state WHERE botId = ?");
+  const deleteQueueState = db.prepare("DELETE FROM queue_state WHERE botId = ?");
+
+  return {
+    db,
+
+    addPlayHistory(record) {
+      insertHistory.run({ ...record, requestedBy: record.requestedBy ?? "" });
+    },
+
+    getPlayHistory(botId, limit) {
+      return selectHistory.all(botId, limit) as PlayHistoryRecord[];
+    },
+
+    saveBotInstance(instance) {
+      upsertInstance.run({
+        ...instance,
+        autoStart: instance.autoStart ? 1 : 0,
+        identity: instance.identity ?? null,
+      });
+    },
+
+    getBotInstances() {
+      const rows = selectInstances.all() as Array<
+        Omit<BotInstance, "autoStart" | "identity"> & { autoStart: number; identity: string | null }
+      >;
+      return rows.map((r) => ({
+        ...r,
+        autoStart: r.autoStart === 1,
+        serverProtocol: r.serverProtocol ?? "",
+        ts6ApiKey: r.ts6ApiKey ?? "",
+        serverPassword: r.serverPassword ?? "",
+        channelId: r.channelId ?? "",
+        identity: r.identity ?? undefined,
+      }));
+    },
+
+    deleteBotInstance(id) {
+      const result = deleteInstance.run(id);
+      return result.changes > 0;
+    },
+
+    getProfileConfig(botId) {
+      const row = selectProfileConfig.get(botId) as Record<string, number> | undefined;
+      if (!row) return { ...DEFAULT_PROFILE_CONFIG };
+      return {
+        avatarEnabled: row.profile_avatar_enabled === 1,
+        descriptionEnabled: row.profile_description_enabled === 1,
+        nicknameEnabled: row.profile_nickname_enabled === 1,
+        awayStatusEnabled: row.profile_away_enabled === 1,
+        channelDescEnabled: row.profile_channel_desc_enabled === 1,
+        nowPlayingMsgEnabled: row.profile_now_playing_enabled === 1,
+      };
+    },
+
+    saveProfileConfig(botId, config) {
+      updateProfileConfig.run({
+        id: botId,
+        avatar: config.avatarEnabled ? 1 : 0,
+        description: config.descriptionEnabled ? 1 : 0,
+        nickname: config.nicknameEnabled ? 1 : 0,
+        away: config.awayStatusEnabled ? 1 : 0,
+        channelDesc: config.channelDescEnabled ? 1 : 0,
+        nowPlaying: config.nowPlayingMsgEnabled ? 1 : 0,
+      });
+    },
+
+    getPlayerSettings(botId) {
+      const row = selectPlayerSettings.get(botId) as
+        | { volume: number | null; play_mode: string | null }
+        | undefined;
+      if (!row) return { ...DEFAULT_PLAYER_SETTINGS };
+      // Coerce/validate: clamp volume to 0-100 and fall back to defaults for any
+      // NULL / out-of-range / unknown value (a hand-edited DB must never feed a
+      // bad value into AudioPlayer.setVolume / PlayQueue.setMode).
+      const rawVol = typeof row.volume === "number" ? row.volume : DEFAULT_PLAYER_SETTINGS.volume;
+      const volume = Number.isFinite(rawVol)
+        ? Math.max(0, Math.min(100, Math.round(rawVol)))
+        : DEFAULT_PLAYER_SETTINGS.volume;
+      const playMode =
+        typeof row.play_mode === "string" && PLAY_MODES.has(row.play_mode)
+          ? row.play_mode
+          : DEFAULT_PLAYER_SETTINGS.playMode;
+      return { volume, playMode };
+    },
+
+    saveVolume(botId, volume) {
+      const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+      updateVolume.run(clamped, botId);
+    },
+
+    savePlayMode(botId, playMode) {
+      // Persist only recognized modes so a bad value can never poison the row.
+      if (!PLAY_MODES.has(playMode)) return;
+      updatePlayMode.run(playMode, botId);
+    },
+
+    getCustomAvatarPath(botId) {
+      const row = selectCustomAvatar.get(botId) as { custom_avatar_path: string | null } | undefined;
+      return row?.custom_avatar_path ?? null;
+    },
+    setCustomAvatarPath(botId, path) {
+      updateCustomAvatar.run(path, botId);
+    },
+
+    addFavorite(userId, playlist) {
+      insertFavorite.run({ userId, ...playlist });
+    },
+
+    removeFavorite(userId, playlistId, platform) {
+      const result = deleteFavorite.run(userId, playlistId, platform);
+      return result.changes > 0;
+    },
+
+    getFavorites(userId) {
+      return selectFavorites.all(userId) as FavoritePlaylist[];
+    },
+
+    isFavorited(userId, playlistId, platform) {
+      const row = checkFavorited.get(userId, playlistId, platform);
+      return row !== undefined;
+    },
+
+    saveQueue(ownerId, name, songs) {
+      if (songs.length > MAX_QUEUE_SONGS) {
+        throw new Error(`保存失败：歌曲数量超过上限 ${MAX_QUEUE_SONGS}`);
+      }
+      // Strip any lazily-resolved url before persisting.
+      const stripped: StoredSong[] = songs.map((s) => {
+        const { url: _url, ...rest } = s as QueuedSong;
+        return rest;
+      });
+      // Enforce the per-owner cap only for a NEW name (an overwrite of an
+      // existing saved queue must always be allowed).
+      const existing = selectSavedQueueIdByOwnerName.get(ownerId, name) as
+        | { id: number }
+        | undefined;
+      if (!existing) {
+        const { c } = countSavedQueues.get(ownerId) as { c: number };
+        if (c >= MAX_SAVED_QUEUES) {
+          throw new Error(`保存失败：已保存队列数量超过上限 ${MAX_SAVED_QUEUES}`);
+        }
+      }
+      upsertSavedQueue.run({
+        ownerId,
+        name,
+        songs: JSON.stringify(stripped),
+        songCount: stripped.length,
+      });
+      const row = selectSavedQueueByOwnerName.get(ownerId, name) as SavedQueueMeta;
+      return { ...rowToSavedMeta(row), songs: stripped };
+    },
+
+    listSavedQueues(ownerId, includeShared) {
+      const rows = includeShared
+        ? (listSavedQueuesShared.all(ownerId, SHARED_QUEUE_OWNER) as SavedQueueMeta[])
+        : (listSavedQueuesOwn.all(ownerId) as SavedQueueMeta[]);
+      return rows.map(rowToSavedMeta);
+    },
+
+    getSavedQueue(id) {
+      const row = selectSavedQueueById.get(id) as
+        | (SavedQueueMeta & { songs: string })
+        | undefined;
+      if (!row) return null;
+      return { ...rowToSavedMeta(row), songs: parseSongs(row.songs) };
+    },
+
+    deleteSavedQueue(id) {
+      return deleteSavedQueueById.run(id).changes > 0;
+    },
+
+    saveQueueState(state) {
+      upsertQueueState.run({
+        botId: state.botId,
+        songs: JSON.stringify(state.songs),
+        currentIndex: state.currentIndex,
+        mode: state.mode,
+        isFmMode: state.isFmMode ? 1 : 0,
+        fmPlatform: state.fmPlatform,
+      });
+    },
+
+    getQueueState(botId) {
+      const r = selectQueueState.get(botId) as
+        | { botId: string; songs: string; currentIndex: number; mode: string; isFmMode: number; fmPlatform: string }
+        | undefined;
+      if (!r) return null;
+      return {
+        botId: r.botId,
+        songs: parseSongs(r.songs),
+        currentIndex: r.currentIndex,
+        mode: r.mode,
+        isFmMode: r.isFmMode === 1,
+        fmPlatform: r.fmPlatform,
+      };
+    },
+
+    clearQueueState(botId) {
+      deleteQueueState.run(botId);
+    },
+
+    close() {
+      db.close();
+    },
+  };
+}

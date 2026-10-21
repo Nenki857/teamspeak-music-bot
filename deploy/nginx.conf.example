@@ -1,0 +1,18 @@
+# Optional stable HTTPS site. Replace the hostname and configure a real
+# certificate before enabling. Do not overwrite an existing nginx site.
+server {
+    listen 443 ssl;
+    server_name music.example.com;
+    ssl_certificate /etc/letsencrypt/live/music.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/music.example.com/privkey.pem;
+    client_max_body_size 2m;
+    location / {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 75s;
+    }
+}
