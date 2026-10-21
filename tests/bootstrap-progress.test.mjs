@@ -20,17 +20,19 @@ async function fixture(t,handler){
 }
 const receive=(url,file,options='')=>'Receive-File -Uri '+quote(url)+' -Destination '+quote(file)+' -Label NodeProbe '+options;
 test('bootstrap download reports received bytes, percent, speed and completion',{skip},async t=>{
-  const bytes=Buffer.alloc(256*1024,65);
+  const bytes=Buffer.alloc(256*1024,65);let resume;
   const f=await fixture(t,(_req,res)=>{
     res.writeHead(200,{'Content-Length':bytes.length});res.write(bytes.subarray(0,65536));
-    setTimeout(()=>res.write(bytes.subarray(65536,196608)),1100).unref();
-    setTimeout(()=>res.end(bytes.subarray(196608)),2200).unref();
+    const watchdog=setTimeout(()=>res.destroy(),12000);watchdog.unref();
+    resume=()=>{clearTimeout(watchdog);res.end(bytes.subarray(65536));};
+    res.on('close',()=>clearTimeout(watchdog));
   });
-  const file=join(f.dir,'node.zip.part');
-  const result=await run(receive(f.url,file));
+  const file=join(f.dir,'node.zip.part');const download=run(receive(f.url,file));let output='';
+  download.child.stdout.on('data',data=>{output+=data.toString();if(/\(25%\)/.test(output)&&resume){const finish=resume;resume=null;finish();}});
+  const result=await download;
   assert.deepEqual(await readFile(file),bytes);
   assert.match(result.stdout,/MiB \(\d+%\).*KiB\/s.*elapsed/);
-  assert.match(result.stdout,/\((?:25|75)%\)/);
+  assert.match(result.stdout,/\(25%\)/);
   assert.match(result.stdout,/\(100%\).*complete/);
 });
 test('chunked download reports actual bytes without inventing a percentage',{skip},async t=>{

@@ -22,7 +22,7 @@ export async function configure({app,operation}){
     if(!config)throw Error('未能读取并验证音频桥初始密码。旧链路未切换；请查看服务器受保护的 sinusbot-init.log。');
   }
   const api=new SinusBotApi(config);await api.login();
-  if(!config.instanceId){let instances=await api.request('/bot/instances');if(!Array.isArray(instances))throw Error('音频桥实例列表无效');let item=instances.find(instance=>instance.backend==='ts3');if(!item)item=await api.request('/bot/instances','POST',{backend:'ts3',nick:'Music Desk'});config.instanceId=item.uuid;}
+  if(!config.instanceId){let instances=await api.request('/bot/instances');if(!Array.isArray(instances))throw Error('音频桥实例列表无效');let item=instances.find(instance=>instance.backend==='ts3');if(!item)item=await api.request('/bot/instances','POST',{backend:'ts3',nick:'Music Bot'});config.instanceId=item.uuid;}
   await new SinusBotApi(config).instance('/settings','GET');
   atomic(file,JSON.stringify({...config,password:vault.encrypt(config.password)},null,2)+'\n');
   if(operation==='--official'){atomic(resolve(app,'server.env'),changeBackend(readFileSync(resolve(app,'server.env'),'utf8'),'official'));console.log('Selected official TS3 client transport.');}

@@ -24,7 +24,7 @@ writeFileSync(resolve(stage, 'server-manifest.json'), JSON.stringify({ version: 
 // never enter the server distribution.
 for (const name of ['data', 'server-data', '.env', '.npmrc', 'node_modules', 'resources', 'src/desktop']) if (existsSync(resolve(stage, name))) throw new Error('发行目录混入本机数据或二进制');
 mkdirSync(resolve(root, 'release/server'), { recursive: true });
-const output = resolve(root, `release/server/TS-Music-Desk-Server-${pkg.version}.tar.gz`);
+const output = resolve(root, `release/server/TS-Music-Bot-Server-${pkg.version}.tar.gz`);
 const result = spawnSync('tar', ['-czf', output, '-C', stage, '.'], { stdio: 'inherit', windowsHide: true });
 if (result.status !== 0) throw new Error('服务器发行包压缩失败');
 writeFileSync(output + '.sha256', createHash('sha256').update(readFileSync(output)).digest('hex') + '\n');

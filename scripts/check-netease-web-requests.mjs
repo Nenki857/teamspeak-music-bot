@@ -74,7 +74,7 @@ if (!isMainThread && workerData?.role === 'web-compatibility') {
       worker.once('message', value => { clearTimeout(timer); accept(value); });
       worker.once('error', () => { clearTimeout(timer); accept({ candidatePassed: false, workerFailed: true }); });
     });
-    console.log(JSON.stringify({ kind: 'TS Music Desk music library compatibility check', capturedAt: new Date().toISOString(), mode: sourceIP ? 'maintained-source-ip' : modulePath ? 'maintained' : 'web', actualSourceIPConfigured: Boolean(sourceIP), ...result, accountSecretsIncluded: false }, null, 2));
+    console.log(JSON.stringify({ kind: 'TS Music Bot music library compatibility check', capturedAt: new Date().toISOString(), mode: sourceIP ? 'maintained-source-ip' : modulePath ? 'maintained' : 'web', actualSourceIPConfigured: Boolean(sourceIP), ...result, accountSecretsIncluded: false }, null, 2));
     if (!result.candidatePassed) process.exitCode = 21;
   } finally { await worker.terminate(); }
 }

@@ -18,7 +18,7 @@ const summary = computed(() => {
 async function copyReport() {
   const value = props.health;
   // Keep the clipboard report explicit, so future state fields cannot leak account data.
-  const report = { kind: 'TS Music Desk audio diagnostics', capturedAt: new Date().toISOString(), windowSeconds: 60,
+  const report = { kind: 'TS Music Bot audio diagnostics', capturedAt: new Date().toISOString(), windowSeconds: 60,
     state: value.state || 'unknown', supported: Boolean(value.supported), backend: value.officialClient ? 'official-client-sinusbot' : 'custom-ts3', officialClient: value.officialClient === true,
     bufferMs: number(value.bufferMs), minBufferMs: number(value.minBufferMs), frames: number(value.frames), underruns: number(value.underruns),
     lateTicks: number(value.lateTicks), maxFrameGapMs: number(value.maxFrameGapMs), maxTickGapMs: number(value.maxTickGapMs),
@@ -35,7 +35,7 @@ async function copyReport() {
       deliveryVerified: false },
     tsConnectionStatistics: 'unsupported', deliveryVerified: false,
     recent: (value.recent || []).slice(-8).map(item => ({ time: number(item.time), type: item.type === 'buffer-empty' ? 'buffer-empty' : 'scheduler-gap', gapMs: number(item.gapMs), bufferMs: number(item.bufferMs) })) };
-  try { if (!await window.musicDesk.copy(JSON.stringify(report, null, 2))) throw new Error('Copy unavailable'); copyMessage.value = '诊断已复制'; }
+  try { if (!await window.musicBot.copy(JSON.stringify(report, null, 2))) throw new Error('Copy unavailable'); copyMessage.value = '诊断已复制'; }
   catch { copyMessage.value = '复制失败，请重试'; }
 }
 </script>

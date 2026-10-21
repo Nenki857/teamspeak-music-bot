@@ -69,7 +69,7 @@ if (process.argv.includes('--init')) {
       if (!process.env.TSMD_PUBLIC_URL || !Number.isInteger(friendPort) || friendPort < 1 || friendPort > 65535 || friendPort === port) throw new Error('TSMD_FRIEND_PORT 无效');
       friends = await createShareServer(service, { host: '127.0.0.1', port: friendPort, resources: resources ? () => resources.sample() : undefined, trustProxy: true, persistentInvites: service.runtime.persistentShares, publicEnabled: () => service.phase === 'running' && service.tunnel.state.status === 'online' });
     }
-    console.log(`TS Music Desk 后台已启动：${host}:${server.port}；主人控制台 /admin`);
+    console.log(`TS Music Bot 后台已启动：${host}:${server.port}；主人控制台 /admin`);
     if (process.env.TSMD_AUTOSTART !== '0' && service.store.get('defaultPreset')) {
       try { await service.rpc('bot.start', { id: service.store.get('defaultPreset') }); }
       catch { console.error('自动连接 TS 未完成，后台继续运行，请在主人控制台检查预设后重试。'); }

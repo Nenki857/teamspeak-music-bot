@@ -15,7 +15,7 @@ const { default: Panel } = await import(pathToFileURL(output).href);
 const settle = async () => { await Promise.resolve(); await nextTick(); await Promise.resolve(); };
 
 test('diagnostic UI distinguishes UDP errors, missing RTT and allowlists copied transport fields', async t => {
-  const reports = []; window.musicDesk = { async copy(value) { reports.push(JSON.parse(value)); return true; } };
+  const reports = []; window.musicBot = { async copy(value) { reports.push(JSON.parse(value)); return true; } };
   const health = reactive({ supported: true, frames: 100, isolatedCore: true, directCatalog: true,
     encoding: { codec: 'opus-music', sampleRate: 48000, channels: 2, frameDurationMs: 20, bitrate: 79200, variableBitrate: false, cookie: 'secret' },
     transport: { supported: true, voicePackets: 100, sendErrors: 0, sendCallbacks: 100, maxSendCallbackMs: 3, pendingVoiceSends: 0, rttMs: null, maxRttMs: null,
@@ -32,7 +32,7 @@ test('diagnostic UI distinguishes UDP errors, missing RTT and allowlists copied 
   delete health.transport; await settle(); box.querySelector('button').click(); await settle(); assert.equal(reports[1].transport.supported, false); assert.equal(reports[1].transport.rttMs, null);
 });
 test('official client diagnostics remain copyable without fabricating old encoder or buffer statistics',async t=>{
-  const reports=[];window.musicDesk={copy:async value=>{reports.push(JSON.parse(value));return true;}};
+  const reports=[];window.musicBot={copy:async value=>{reports.push(JSON.parse(value));return true;}};
   const box=document.createElement('div');document.body.append(box);const app=createApp({setup:()=>()=>h(Panel,{health:{supported:false,officialClient:true,state:'playing',backend:'official-client-sinusbot',note:'secret URL must not be copied'}})});app.mount(box);t.after(()=>{app.unmount();box.remove();});
   assert.equal(box.querySelector('button').disabled,false);assert.equal(box.querySelector('.audio-health-grid'),null);assert.ok(!box.textContent.includes('20 ms'));box.querySelector('button').click();await settle();assert.equal(reports[0].officialClient,true);assert.equal(reports[0].backend,'official-client-sinusbot');assert.equal(reports[0].frames,null);assert.ok(!JSON.stringify(reports[0]).includes('secret'));
 });

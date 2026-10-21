@@ -1,10 +1,11 @@
+import { LEGACY_LIBRARY_KIND } from '../shared/legacy-brand.mjs';
 import { requireCore } from '../worker/paths.mjs';
 import { isLocalPlaylist, playlistName, playlistDescription, playlistSongs, openPlaylistMetadata } from '../shared/playlist-format.mjs';
 import { visitorName } from '../shared/visitor.mjs';
 
-const kind = 'TS Music Desk server library';
+const kind = 'TS Music Bot server library';
 function normalize(value) {
-  if (value?.kind !== kind || value.version !== 1 || !Array.isArray(value.localPlaylists) || value.localPlaylists.length > 200 || !Array.isArray(value.openPlaylists) || value.openPlaylists.length > 200) throw new Error('歌单迁移文件无效');
+  if (![kind, LEGACY_LIBRARY_KIND].includes(value?.kind) || value.version !== 1 || !Array.isArray(value.localPlaylists) || value.localPlaylists.length > 200 || !Array.isArray(value.openPlaylists) || value.openPlaylists.length > 200) throw new Error('歌单迁移文件无效');
   return { kind, version: 1,
     localPlaylists: value.localPlaylists.map(item => {
       if (!isLocalPlaylist(item.id)) throw new Error('自建歌单 ID 无效');

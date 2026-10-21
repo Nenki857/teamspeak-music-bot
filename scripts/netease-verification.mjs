@@ -1,3 +1,4 @@
+import { LEGACY_VERIFICATION_KIND } from '../src/shared/legacy-brand.mjs';
 import { readFileSync, writeFileSync, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -61,7 +62,7 @@ function verificationFromFailure(error) {
 }
 
 export function verificationPage(record, now = Date.now()) {
-  if (record?.kind !== 'TS Music Desk official verification page' || record?.state !== 'verification-available' || record.contextComplete !== true) return null;
+  if (!['TS Music Bot official verification page', LEGACY_VERIFICATION_KIND].includes(record?.kind) || record?.state !== 'verification-available' || record.contextComplete !== true) return null;
   const age = now - Date.parse(record.createdAt);
   if (!Number.isFinite(age) || age < -120000 || age > 10 * 60 * 1000) return null;
   const value = officialVerificationUrl(record.url);
@@ -100,7 +101,7 @@ if (!isMainThread && workerData?.role === 'verification-page') {
         worker.once('message', value => { clearTimeout(timer); accept(value); });
         worker.once('error', () => { clearTimeout(timer); accept({ state: 'verification-unavailable', collectionFailed: true }); });
       });
-      const record = { kind: 'TS Music Desk official verification page', createdAt: new Date().toISOString(), ...result };
+      const record = { kind: 'TS Music Bot official verification page', createdAt: new Date().toISOString(), ...result };
       writeFileSync(resolve(process.argv[4]), JSON.stringify(record), { mode: 0o600, flag: 'wx' });
       // The private URL can carry a challenge token. Never print it or raw errors.
       console.log(JSON.stringify({ state: result.state, errorCode: result.errorCode, verifyType: result.verifyType }));

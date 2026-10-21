@@ -1,5 +1,5 @@
 {
-  "name": "teamspeak-music-desk",
+  "name": "teamspeak-music-bot",
   "version": "1.2.1",
   "description": "本地 TeamSpeak 音乐机器人与授权共享控制",
   "private": true,
@@ -17,8 +17,8 @@
     "build:local": "node scripts/build-core.mjs && vite build",
     "build:server": "node scripts/build-core.mjs && vite build --mode server",
     "package:server": "npm run build:server && node scripts/package-server.mjs && node scripts/check-server-package.mjs && node scripts/package-server-update.mjs && node scripts/check-server-update.mjs",
-    "manage:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage.ps1 -Edition local -Action menu",
-    "manage:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage.ps1 -Edition server -Action menu"
+    "manage:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage.ps1 -Edition server -Action menu",
+    "download:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manage.ps1 -Edition local -Action default"
   },
   "dependencies": {
     "koffi": "3.3.3",

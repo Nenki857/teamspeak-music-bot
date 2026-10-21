@@ -29,7 +29,7 @@ const loginHint = computed(() => ({
 }[frame.value?.login?.state] || ''));
 function update(value) { if (alive && value?.image?.startsWith('data:image/jpeg;base64,')) { frame.value = value; frameError.value = ''; } }
 async function copyLoginDiagnostic() {
-  const diagnostic = { kind: 'TS Music Desk official login diagnostics', capturedAt: new Date().toISOString(), login: frame.value?.login || { state: 'unknown' } };
+  const diagnostic = { kind: 'TS Music Bot official login diagnostics', capturedAt: new Date().toISOString(), login: frame.value?.login || { state: 'unknown' } };
   try { await navigator.clipboard.writeText(JSON.stringify(diagnostic, null, 2)); diagnosticCopied.value = true; }
   catch { error.value = '诊断复制失败，请允许控制台访问剪贴板后重试'; }
 }

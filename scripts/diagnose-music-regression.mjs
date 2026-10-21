@@ -115,7 +115,7 @@ if (!isMainThread && workerData?.role === 'regression-session') {
       worker.once('message', value => { clearTimeout(timer); accept(value); });
       worker.once('error', () => { clearTimeout(timer); accept({ failed: true }); });
     });
-    console.log(JSON.stringify({ kind: 'TS Music Desk music regression check', capturedAt: new Date().toISOString(), referenceCapturedAt: expected.capturedAt, service: context.report, program, backups, sessions, accountSecretsIncluded: false, installedFilesChanged: false }, null, 2));
+    console.log(JSON.stringify({ kind: 'TS Music Bot music regression check', capturedAt: new Date().toISOString(), referenceCapturedAt: expected.capturedAt, service: context.report, program, backups, sessions, accountSecretsIncluded: false, installedFilesChanged: false }, null, 2));
     if (sessions.failed || sessions.timedOut) process.exitCode = 1;
   } catch { console.error('Regression check could not complete. No service, installed files or login data were changed.'); process.exitCode = 1; }
   finally { if (worker) await worker.terminate(); }

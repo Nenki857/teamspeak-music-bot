@@ -32,7 +32,7 @@ try {
   async function owner(legacy = false) {
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.exposeFunction('desktopRpc', async (method, args) => { const value = await service.rpc(method, args); if (legacy && method === 'status') return { ...value, capabilities: undefined, localPlaylists: undefined }; return value; });
-    await page.addInitScript(() => { window.musicDesk = { rpc: (...args) => window.desktopRpc(...args), subscribe: () => () => {}, resources: async () => ({ paused: true }), copy: async () => true, quit() {} }; });
+    await page.addInitScript(() => { window.musicBot = { rpc: (...args) => window.desktopRpc(...args), subscribe: () => () => {}, resources: async () => ({ paused: true }), copy: async () => true, quit() {} }; });
     await page.goto(origin); await page.getByRole('button', { name: '保存', exact: true }).waitFor(); return page;
   }
   const old = await owner(true); await old.getByRole('button', { name: '保存', exact: true }).click();

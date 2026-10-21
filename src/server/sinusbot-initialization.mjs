@@ -16,7 +16,7 @@ export function initializeSinusbot(app,{run=spawnSync}={}) {
   // Preserve the first generated password when retrying an interrupted setup.
   const output=openSync(file,'a',0o600);let result;
   try{
-    chmodSync(file,0o600);writeSync(output,'\n--- Music Desk initialization attempt ---\n');
+    chmodSync(file,0o600);writeSync(output,'\n--- Music Bot initialization attempt ---\n');
     result=run(resolve(app,'runtime/sinusbot/sinusbot'),['--initonly'],{cwd:resolve(app,'runtime/sinusbot'),stdio:['ignore',output,output],timeout:60000,windowsHide:true});
   }finally{closeSync(output);}
   const state=inspectInitialization(readFileSync(file,'utf8'));

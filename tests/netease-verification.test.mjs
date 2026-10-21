@@ -18,7 +18,7 @@ test('only the returned verification page is retained and there is one request w
 });
 
 test('stale or malformed records cannot launch a browser', () => {
-  const now = Date.now(), record = { kind: 'TS Music Desk official verification page', createdAt: new Date(now).toISOString(), state: 'verification-available', contextComplete:true, url: completeVerificationUrl({verifyUrl:'https://st.music.163.com/encrypt-pages',verifyToken:'token',verifyId:1,verifyType:40,params:{event_id:'event'}}) };
+  const now = Date.now(), record = { kind: 'TS Music Bot official verification page', createdAt: new Date(now).toISOString(), state: 'verification-available', contextComplete:true, url: completeVerificationUrl({verifyUrl:'https://st.music.163.com/encrypt-pages',verifyToken:'token',verifyId:1,verifyType:40,params:{event_id:'event'}}) };
   assert.equal(verificationPage(record, now), record.url);
   assert.equal(verificationPage(record, now + 600001), null);
   assert.equal(verificationPage({ ...record, createdAt: 'invalid' }, now), null);

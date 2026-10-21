@@ -22,7 +22,7 @@ const settle = async () => { for (let i = 0; i < 4; i++) { await Promise.resolve
 async function fixture(t, options = {}) {
   let listener; let statusReads = 0; const writes = []; const grants = []; const moves = []; const plays = []; const searches = []; const listTypes = []; const modes = []; const saves = []; const artistCalls = []; const albumCalls = []; const volumeCalls = []; const lyricsCalls = [];
   let state = { ready: true, phase: 'stopped', presets: [], grants: [], publications: [], localPlaylists: [], capabilities: { savedPlaylists: true }, player: { queue: [] }, auth: { loggedIn: false }, permissions: [], ...options.state };
-  window.musicDesk = {
+  window.musicBot = {
     server: !!options.server,
     changePassword: options.changePassword,
     subscribe(callback) { listener = callback; return () => { listener = null; }; },

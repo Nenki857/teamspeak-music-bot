@@ -14,7 +14,7 @@ $script:Node = $null
 $script:SshArgs = @()
 function Write-Stage([string]$Message,[string]$ConsoleMessage='') {
   if(-not $ConsoleMessage){$ConsoleMessage=$Message}
-  Write-Host ('[Music Desk] ' + $ConsoleMessage)
+  Write-Host ('[Music Bot] ' + $ConsoleMessage)
   [IO.Directory]::CreateDirectory($script:Work) | Out-Null
   [IO.File]::AppendAllText((Join-Path $script:Work ($Edition+'-last.log')),([DateTime]::Now.ToString('s')+' '+$Message+[Environment]::NewLine),[Text.UTF8Encoding]::new($false))
 }
@@ -156,6 +156,7 @@ function Ensure-Node {
   $env:Path=(Split-Path $script:Node)+';'+$env:Path
 }
 function Prepare-Project([string]$Mode,[switch]$Package) {
+  if ($Mode -ne 'server') { throw '本地版请从 Releases 下载完整 ZIP；源码打包请自行准备依赖后使用 npm run package:win。' }
   Ensure-Node
   $verb='prepare'; if ($Package) { $verb='package' }
   Invoke-Native $script:Node @('scripts/prepare-project.mjs',$verb,$Mode) -ShowOutput -Activity ('Preparing '+$Mode+' edition')
@@ -239,7 +240,7 @@ function Package-Hash([string]$Archive) {
   return $hash
 }
 function Update-Server {
-  $archive='release/server/TS-Music-Desk-Server-'+(Version)+'-update.tar.gz'
+  $archive='release/server/TS-Music-Bot-Server-'+(Version)+'-update.tar.gz'
   $hash=Package-Hash $archive; $id=[Guid]::NewGuid().ToString('N')
   Upload $archive ('tsmd-update-'+$id+'.tar.gz')
   Upload 'deploy/update-ubuntu.sh' ('tsmd-update-'+$id+'.sh')
@@ -251,7 +252,7 @@ function Install-Browser {
   Invoke-Native $script:Node @('scripts/prepare-official-browser.mjs') -ShowOutput -Activity 'Preparing the server browser component'
   $browser='release/server/tools/chrome-linux64-155.0.8059.84.zip'
   $browserHash=Package-Hash $browser
-  $update='release/server/TS-Music-Desk-Server-'+(Version)+'-update.tar.gz'
+  $update='release/server/TS-Music-Bot-Server-'+(Version)+'-update.tar.gz'
   $hash=Package-Hash $update; $id=[Guid]::NewGuid().ToString('N'); $prefix='tsmd-browser-'+$id
   Upload $browser ($prefix+'.zip'); Upload $update ($prefix+'.tar.gz')
   Upload 'deploy/setup-official-browser.sh' ($prefix+'.sh'); Upload 'deploy/update-ubuntu.sh' ($prefix+'-update.sh')
@@ -267,11 +268,11 @@ function Deploy-Server {
     if ($probe.browser) { Update-Server }
     else { Install-Browser }
   } else {
-    $archive='release/server/TS-Music-Desk-Server-'+(Version)+'.tar.gz'
+    $archive='release/server/TS-Music-Bot-Server-'+(Version)+'.tar.gz'
     $hash=Package-Hash $archive; $id=[Guid]::NewGuid().ToString('N')
     Upload $archive ('tsmd-install-'+$id+'.tar.gz')
     Write-Stage '首次安装服务器后台；主人密码只在终端显示，请自行保存。' -ConsoleMessage 'Installing the server service. Save the owner password shown below.'
-    Remote ('set -eu; archive="$HOME/tsmd-install-'+$id+'.tar.gz"; test "$(sha256sum "$archive" | cut -d" " -f1)" = '+$hash+'; app="$HOME/ts-music-desk-server-'+$id+'"; mkdir "$app"; tar -xzf "$archive" -C "$app"; bash "$app/deploy/preflight.sh"; bash "$app/deploy/install-ubuntu.sh"')
+    Remote ('set -eu; archive="$HOME/tsmd-install-'+$id+'.tar.gz"; test "$(sha256sum "$archive" | cut -d" " -f1)" = '+$hash+'; app="$HOME/ts-music-bot-server-'+$id+'"; mkdir "$app"; tar -xzf "$archive" -C "$app"; bash "$app/deploy/preflight.sh"; bash "$app/deploy/install-ubuntu.sh"')
     Install-Browser
   }
   Write-Stage '部署完成。' -ConsoleMessage 'Deployment completed.'
@@ -327,28 +328,31 @@ function Audio-Transport([string]$Mode) {
   Write-Host '官方 TS3 客户端安装时，请自行阅读许可并在终端选择是否接受。'
   Remote ('bash ~/tsmd-audio-'+$id+'.sh --install ~/tsmd-bridge-'+$id+'.js ~/tsmd-audio-'+$id+'.tar.bz2 '+$hash) -Interactive
 }
-function Start-Local {
-  Prepare-Project 'local'
-  $env:ELECTRON_RUN_AS_NODE=$null
-  Start-Process -FilePath (Join-Path $script:Root 'node_modules/electron/dist/electron.exe') -ArgumentList '.' -WorkingDirectory $script:Root -WindowStyle Hidden
+function Open-LocalRelease {
+  $url='https://github.com/Nenki857/teamspeak-music-bot/releases'
+  Write-Host '本地版请从 Releases 下载完整 Windows ZIP，解压后运行 TS Music Bot.exe。'
+  Write-Host '源码不再自动下载或安装本地运行依赖。'
+  Write-Host $url
+  Start-Process $url
 }
 function Show-Menu {
+  if ($Edition -eq 'local') { Open-LocalRelease;return }
   while ($true) {
     Write-Host ''
-    if ($Edition -eq 'local') { Write-Host '1 安装/更新并启动本地版   2 打包 Windows 安装包   0 退出' }
-    else { Write-Host '1 一键部署/更新   2 打开主人控制台   3 查看服务状态   4 重启音乐机器人';Write-Host '5 配置固定公网入口   6 音频链路检查   7 切换官方音频   8 恢复原音频';Write-Host '9 修改连接设置   P 打包服务器版   0 退出' }
+    Write-Host '1 一键部署/更新   2 打开主人控制台   3 查看服务状态   4 重启音乐机器人'
+    Write-Host '5 配置固定公网入口   6 音频链路检查   7 切换官方音频   8 恢复原音频'
+    Write-Host '9 修改连接设置   P 打包服务器版   0 退出'
     $selection=Read-Host '请选择'
     if ($selection -eq '0') { return }
     try {
-      if ($Edition -eq 'local') { switch ($selection) { '1' { Start-Local } '2' { Prepare-Project 'local' -Package } default { Write-Host '请选择 1、2 或 0。' } } }
-      else { switch ($selection.ToUpperInvariant()) {
+      switch ($selection.ToUpperInvariant()) {
         '1' { Deploy-Server } '2' { Connect-Settings;Open-Console }
         '3' { Connect-Settings;Remote 'systemctl is-active ts-music-desk.service; systemctl show ts-music-desk.service -p WorkingDirectory -p ActiveState -p SubState' }
         '4' { Connect-Settings;Remote 'sudo -n /usr/bin/systemctl restart ts-music-desk.service';Open-Console }
         '5' { Fixed-Endpoint } '6' { Audio-Transport 'diagnose' } '7' { Audio-Transport 'official' } '8' { Audio-Transport 'custom' }
         '9' { $null=Read-Settings -Reset; $script:SshArgs=@() } 'P' { Prepare-Project 'server' -Package }
         default { Write-Host '请选择菜单中的项目。' }
-      } }
+      }
     } catch { Write-Host $_.Exception.Message -ForegroundColor Red;Write-Stage '本次操作未完成，修复错误后使用同一入口重试。' }
   }
 }
@@ -356,8 +360,12 @@ if ($Library) { return }
 Set-Location -LiteralPath $script:Root
 if ($CheckOnly) { Write-Output (@{edition=$Edition;root=$script:Root;action=$Action;networkAttempted=$false;settingsStoredIn='work/deployment/settings.json'} | ConvertTo-Json -Compress);exit 0 }
 try {
+  if ($Edition -eq 'local') {
+    if ($Action -notin @('default','menu')) { throw '本地版请使用 Releases 完整 ZIP；开发打包请使用 npm run package:win。' }
+    Open-LocalRelease;exit 0
+  }
   switch ($Action) {
-    'default' { if ($Edition -eq 'local') { Start-Local } else { Deploy-Server } }
+    'default' { Deploy-Server }
     'menu' { Show-Menu }
     'package' { Prepare-Project $Edition -Package }
     'console' { Connect-Settings;Open-Console }

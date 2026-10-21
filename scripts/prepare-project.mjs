@@ -1,9 +1,8 @@
-import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { preparePublicTunnel } from './prepare-public-tunnel.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const core = resolve(root, 'vendor/teamspeak-music-bot-1.13.2');
 const state = resolve(root, 'work/setup');
@@ -45,42 +44,28 @@ function dependencies(directory, name, required, options = {}) {
   }
   writeFileSync(marker, expected);
 }
-export async function prepare(edition, { requireTunnel = false } = {}) {
-  if (!['local', 'server'].includes(edition)) throw Error('版本类型无效');
+export async function prepare(edition) {
+  if (edition !== 'server') throw Error('Windows local edition: download the complete ZIP from https://github.com/Nenki857/teamspeak-music-bot/releases. Automatic local installation has been removed.');
   if (process.versions.node.split('.')[0] !== '22') throw Error('请使用统一入口准备 Node.js 22');
   mkdirSync(state, { recursive: true });
-  dependencies(root, 'desktop', ['node_modules/vue/package.json', 'node_modules/vite/bin/vite.js', ...(edition === 'local' ? ['node_modules/electron/dist/electron.exe'] : [])], { environment: { ELECTRON_SKIP_BINARY_DOWNLOAD: edition === 'server' ? '1' : '' } });
-  dependencies(core, 'core', ['node_modules/typescript/bin/tsc', 'node_modules/NeteaseCloudMusicApi/package.json', ...(edition === 'local' ? ['node_modules/ffmpeg-static/ffmpeg.exe'] : [])], { ignoreScripts: edition === 'server' });
-  if (edition === 'local') {
-  const native = spawnSync(process.execPath, ['--input-type=module', '-e', "import{createRequire}from'node:module';const r=createRequire(process.argv[1]);const DB=r('better-sqlite3');new DB(':memory:').close();new(r('@discordjs/opus').OpusEncoder)(48000,2).encode(Buffer.alloc(3840));", resolve(core, 'package.json')], { cwd: root, windowsHide: true, stdio: 'ignore' });
-  if (native.status !== 0) { console.log('[Setup] Preparing native audio dependencies'); npm(['rebuild', 'better-sqlite3', '@discordjs/opus', '--foreground-scripts'], core); }
-  }
+  dependencies(root, 'server-build', ['node_modules/vue/package.json', 'node_modules/vite/bin/vite.js'], { environment: { ELECTRON_SKIP_BINARY_DOWNLOAD: '1' } });
+  dependencies(core, 'core', ['node_modules/typescript/bin/tsc', 'node_modules/NeteaseCloudMusicApi/package.json'], { ignoreScripts: true });
   const coreStamp = resolve(state, 'core-build'), coreHash = sourceFingerprint(['vendor/teamspeak-music-bot-1.13.2/src']) + fileHash(resolve(core, 'tsconfig.json'));
   if (!existsSync(resolve(core, 'dist/audio/player.js')) || !existsSync(coreStamp) || readFileSync(coreStamp, 'utf8') !== coreHash) { console.log('[Setup] Building the audio engine'); run(['scripts/build-core.mjs']); writeFileSync(coreStamp, coreHash); }
-  const marker = resolve(state, edition + '-build');
+  const marker = resolve(state, 'server-build');
   const fingerprint = sourceFingerprint(['src/renderer', 'public']) + fileHash(resolve(root, 'vite.config.mjs')) + fileHash(resolve(root, 'package-lock.json'));
-  const output = resolve(root, edition === 'server' ? 'dist/server-ui/index.html' : 'dist/ui/index.html');
+  const output = resolve(root, 'dist/server-ui/index.html');
   if (!existsSync(output) || !existsSync(marker) || readFileSync(marker, 'utf8') !== fingerprint) {
-    console.log('[Setup] Building the ' + edition + ' interface');
-    run(['node_modules/vite/bin/vite.js', 'build', ...(edition === 'server' ? ['--mode', 'server'] : [])]); writeFileSync(marker, fingerprint);
+    console.log('[Setup] Building the server interface');
+    run(['node_modules/vite/bin/vite.js', 'build', '--mode', 'server']); writeFileSync(marker, fingerprint);
   }
-  if (edition === 'local') {
-    mkdirSync(resolve(root, 'resources/node'), { recursive: true });
-    const bundled = resolve(root, 'resources/node/node.exe');
-    if (!existsSync(bundled)) copyFileSync(process.execPath, bundled);
-    await preparePublicTunnel({ root, required: requireTunnel });
-  }
-  console.log(edition === 'server' ? 'Server edition is ready.' : 'Local edition is ready to start.');
+  console.log('Server edition is ready.');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [action, edition = 'local'] = process.argv.slice(2);
   try {
-    await prepare(edition, { requireTunnel: action === 'package' });
-    if (action === 'package' && edition === 'server') for (const file of ['package-server.mjs', 'check-server-package.mjs', 'package-server-update.mjs', 'check-server-update.mjs']) run(['scripts/' + file]);
-    else if (action === 'package' && edition === 'local') {
-      run(['scripts/create-icon.mjs']);
-      if (!existsSync(resolve(root, 'resources/licenses/Node-v22.14.0-LICENSE.txt'))) run(['scripts/collect-runtime-licenses.mjs']);
-      for (const file of ['prepare-package.mjs', 'package-windows.mjs', 'check-package.mjs']) run(['scripts/' + file]);
-    } else if (action !== 'prepare') throw Error('准备操作无效');
+    if (!['prepare', 'package'].includes(action)) throw Error('准备操作无效');
+    await prepare(edition);
+    if (action === 'package') for (const file of ['package-server.mjs', 'check-server-package.mjs', 'package-server-update.mjs', 'check-server-update.mjs']) run(['scripts/' + file]);
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

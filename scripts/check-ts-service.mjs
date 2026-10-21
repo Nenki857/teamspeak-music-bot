@@ -11,7 +11,7 @@ if (preset.serverPassword || preset.channelPassword) throw new Error('此短时�
 const { Service } = await import('../src/worker/service.mjs'); const { createVault } = await import('../src/shared/security.mjs');
 const service = new Service(createVault(randomBytes(32)), () => {}); let code = 0;
 try {
-  await service.init(); const saved = await service.rpc('presets.save', { name: 'Connection check', serverAddress: preset.serverAddress, serverPort: preset.serverPort, defaultChannel: preset.defaultChannel, channelId: preset.channelId, nickname: 'MusicDesk_Check_' + Date.now().toString().slice(-4) });
+  await service.init(); const saved = await service.rpc('presets.save', { name: 'Connection check', serverAddress: preset.serverAddress, serverPort: preset.serverPort, defaultChannel: preset.defaultChannel, channelId: preset.channelId, nickname: 'MusicBot_Check_' + Date.now().toString().slice(-4) });
   const began = Date.now(); const result = await service.rpc('bot.start', { id: saved.id });
   assert.equal(result.phase, 'running'); assert.equal(result.player.connected, true); assert.notEqual(result.player.channelId, '0');
   console.log(JSON.stringify({ phase: result.phase, connected: result.player.connected, channelId: result.player.channelId, elapsedMs: Date.now() - began }));

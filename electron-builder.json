@@ -1,6 +1,6 @@
 {
-  "appId": "local.tsmusicdesk.app",
-  "productName": "TS Music Desk",
+  "appId": "local.tsmusicbot.app",
+  "productName": "TS Music Bot",
   "directories": {
     "app": "work/local/package-stage",
     "output": "release/local",
@@ -45,7 +45,7 @@
       }
     ],
     "icon": "resources/app.ico",
-    "artifactName": "TS-Music-Desk-${version}-${arch}.${ext}"
+    "artifactName": "TS-Music-Bot-${version}-${arch}.${ext}"
   },
   "nsis": {
     "oneClick": false,

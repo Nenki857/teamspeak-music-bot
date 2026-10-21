@@ -28,7 +28,7 @@ try {
   await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
   await page.exposeFunction('desktopRpc', (method, args) => service.rpc(method, args));
-  await page.addInitScript(() => { window.musicDesk = { rpc: (...args) => window.desktopRpc(...args), subscribe: () => () => {}, resources: async () => ({ paused: true }), copy: async () => true, quit() {} }; });
+  await page.addInitScript(() => { window.musicBot = { rpc: (...args) => window.desktopRpc(...args), subscribe: () => () => {}, resources: async () => ({ paused: true }), copy: async () => true, quit() {} }; });
   const openSharing = async () => { await page.getByRole('button', { name: /分享控制/ }).click(); await page.getByRole('button', { name: '+ 创建授权链接', exact: true }).waitFor(); };
   const createGrant = async name => { await page.getByPlaceholder('例如：周末开黑的朋友').fill(name); await page.getByRole('button', { name: '+ 创建授权链接', exact: true }).click(); await page.getByRole('heading', { name, exact: true }).waitFor(); return page.locator('.grant-card').filter({ has: page.getByRole('heading', { name, exact: true }) }); };
   const toggle = card => card.getByRole('checkbox', { name: '有人入频道时自动发送此链接', exact: true });

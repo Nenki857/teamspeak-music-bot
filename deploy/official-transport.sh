@@ -108,7 +108,7 @@ exec /usr/bin/xvfb-run -a -s '-screen 0 640x480x24 -nolisten tcp' "$BASE/sinusbo
 EOF
 cat > "$BASE/service" <<EOF
 [Unit]
-Description=TS Music Desk official TS3 client audio bridge
+Description=TS Music Bot official TS3 client audio bridge
 After=network-online.target
 Wants=network-online.target
 PartOf=ts-music-desk.service

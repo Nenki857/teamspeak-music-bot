@@ -1,5 +1,5 @@
-// TS Music Desk bridge. SinusBot script API; no public: handlers are registered.
-registerPlugin({name:'TS Music Desk transport',version:'1.0.0',description:'Private official TS3-client transport for TS Music Desk',author:'TS Music Desk',autorun:true,backends:['ts3'],requiredModules:['backend','media','audio','event']},function(){
+// TS Music Bot bridge. SinusBot script API; no public: handlers are registered.
+registerPlugin({name:'TS Music Bot transport',version:'1.0.0',description:'Private official TS3-client transport for TS Music Bot',author:'TS Music Bot',autorun:true,backends:['ts3'],requiredModules:['backend','media','audio','event']},function(){
   var backend=require('backend'),media=require('media'),audio=require('audio'),event=require('event');
   var mode='idle',url='',playbackId='',endedId='',position=0,pendingSeek=0,arrivals=0,joinTarget='';
   var boot=String(Date.now())+'-'+String(Math.random()),sequence=0,startedAt=0;

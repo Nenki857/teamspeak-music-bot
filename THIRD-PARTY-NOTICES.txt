@@ -1,4 +1,4 @@
-TS Music Desk — Third-party notices
+TS Music Bot — Third-party notices
 
 Project code: MIT; see LICENSE. The project license does not relicense
 third-party code, libraries, trademarks, music, or account content.
@@ -36,6 +36,6 @@ third-party code, libraries, trademarks, music, or account content.
    This project does not grant rights to repackage their binaries or branding.
 
 5. Music services
-   TS Music Desk is a community project, not an official NetEase, TeamSpeak
+   TS Music Bot is a community project, not an official NetEase, TeamSpeak
    or SinusBot product. Music and service accounts retain their owners' rights.
    Use your own authorized account and comply with the relevant service terms.

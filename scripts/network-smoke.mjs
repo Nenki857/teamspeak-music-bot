@@ -12,6 +12,6 @@ try {
   try {
     const tunnel = await service.tunnel.start(server.port); console.log('Quick Tunnel:', tunnel.status);
     const response = await fetch(tunnel.url, { signal: AbortSignal.timeout(15000) });
-    console.log('Public page:', response.status, (await response.text()).includes('TS Music Desk'));
+    console.log('Public page:', response.status, (await response.text()).includes('TS Music Bot'));
   } catch (error) { console.log('Quick Tunnel:', error.message); }
 } finally { server?.close(); service.close(); }

@@ -1,15 +1,17 @@
+import { legacyProjectLockHashes } from './update-dependency-compat.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, lstatSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const version=JSON.parse(readFileSync('package.json')).version;
-const archive=resolve(`release/server/TS-Music-Desk-Server-${version}-update.tar.gz`),stage=mkdtempSync(resolve('work/update-check-'));
+const archive=resolve(`release/server/TS-Music-Bot-Server-${version}-update.tar.gz`),stage=mkdtempSync(resolve('work/update-check-'));
 const hash=path=>createHash('sha256').update(readFileSync(path)).digest('hex');
 assert.equal(readFileSync(archive+'.sha256','utf8').split(' ')[0],hash(archive));
 const extracted=spawnSync('tar',['-xzf',archive,'-C',stage],{encoding:'utf8',windowsHide:true}); assert.equal(extracted.status,0,extracted.stderr);
 const m=JSON.parse(readFileSync(resolve(stage,'update-manifest.json'))); assert.equal(m.kind,'tsmd-code-update'); assert.equal(m.version,version);
 for(const[name,digest]of Object.entries(m.dependencies))assert.equal(hash(resolve(name)),digest);
+assert.deepEqual(m.compatibleDependencies,{'package-lock.json':legacyProjectLockHashes(readFileSync('package-lock.json','utf8'))});
 let count=0;
 function walk(dir,prefix=''){for(const entry of readdirSync(dir,{withFileTypes:true})){const path=resolve(dir,entry.name),name=prefix+entry.name;assert.equal(lstatSync(path).isSymbolicLink(),false);if(entry.isDirectory()){walk(path,name+'/');continue;}if(name==='update-manifest.json')continue;assert.match(name,/^(src\/(server|worker|shared)|dist\/ui|vendor\/teamspeak-music-bot-1\.13\.2\/dist)\//);assert.doesNotMatch(name,/(^|\/)(app\.db|core\.db|server-admin\.json|.*\.key|\.env)$|\.(exe|dll|node|log)$/i);assert.equal(hash(path),m.files[name]);count++;}}
 assert.ok(m.files['vendor/teamspeak-music-bot-1.13.2/dist/audio/player.js'],'Missing current audio core');

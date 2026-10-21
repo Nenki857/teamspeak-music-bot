@@ -1,4 +1,5 @@
-export const PLAYLIST_FILE_KIND = 'TS Music Desk playlist';
+import { LEGACY_PLAYLIST_KIND } from './legacy-brand.mjs';
+export const PLAYLIST_FILE_KIND = 'TS Music Bot playlist';
 export function playlistDateName(date = new Date()) {
   const pad = value => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
@@ -42,7 +43,7 @@ export function openPlaylistMetadata(value) {
 }
 export function playlistFile(name, songs, openPlaylists = [], description = '') { return { kind: PLAYLIST_FILE_KIND, version: 1, name: playlistName(name), description: playlistDescription(description), savedAt: new Date().toISOString(), songs: playlistSongs(songs), openPlaylists: openPlaylists.filter(item => /^\d{1,20}$/.test(String(item.id))).slice(0, 200).map(openPlaylistMetadata) }; }
 export function readPlaylistFile(value) {
-  if (!value || value.kind !== PLAYLIST_FILE_KIND || value.version !== 1) throw new Error('请选择本工具导出的歌单 JSON 文件');
+  if (!value || ![PLAYLIST_FILE_KIND, LEGACY_PLAYLIST_KIND].includes(value.kind) || value.version !== 1) throw new Error('请选择本工具导出的歌单 JSON 文件');
   if (value.openPlaylists !== undefined && (!Array.isArray(value.openPlaylists) || value.openPlaylists.length > 200)) throw new Error('开放歌单列表无效');
   return { name: playlistName(value.name), description: playlistDescription(value.description), songs: playlistSongs(value.songs), openPlaylists: (value.openPlaylists || []).map(openPlaylistMetadata) };
 }

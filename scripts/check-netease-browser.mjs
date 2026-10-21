@@ -38,7 +38,7 @@ if (!isMainThread && workerData?.role === 'normal-web-login-check') {
       worker.once('message', value => { clearTimeout(timer); accept(value); });
       worker.once('error', () => { clearTimeout(timer); accept({ candidatePassed: false, workerFailed: true }); });
     });
-    console.log(JSON.stringify({ kind: 'TS Music Desk normal web login check', capturedAt: new Date().toISOString(), mode: 'browser', ...result, accountDataRead: false, accountSecretsIncluded: false }, null, 2));
+    console.log(JSON.stringify({ kind: 'TS Music Bot normal web login check', capturedAt: new Date().toISOString(), mode: 'browser', ...result, accountDataRead: false, accountSecretsIncluded: false }, null, 2));
     if (!result.candidatePassed) process.exitCode = 21;
   } finally { await worker.terminate(); }
 }

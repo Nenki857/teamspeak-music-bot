@@ -44,7 +44,7 @@ export class Store {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('端口范围为 1–65535');
     const channelId = String(input.channelId || '').trim(); if (channelId && !/^\d+$/.test(channelId)) throw new Error('频道 ID 必须为数字');
     const old = input.id ? this.read(input.id) : null;
-    const p = { id: old?.id || randomUUID(), name, serverAddress: host, serverPort: port, nickname: String(input.nickname || 'Music Desk').trim().slice(0, 30) || 'Music Desk', channelId, defaultChannel: String(input.defaultChannel || '').trim().slice(0, 100),
+    const p = { id: old?.id || randomUUID(), name, serverAddress: host, serverPort: port, nickname: String(input.nickname || 'Music Bot').trim().slice(0, 30) || 'Music Bot', channelId, defaultChannel: String(input.defaultChannel || '').trim().slice(0, 100),
       serverPassword: this.vault.encrypt(input.serverPassword === undefined ? old?.serverPassword : input.serverPassword), channelPassword: this.vault.encrypt(input.channelPassword === undefined ? old?.channelPassword : input.channelPassword), coreBotId: old?.coreBotId || null, updatedAt: Date.now() };
     this.db.prepare('INSERT OR REPLACE INTO presets VALUES(?,?)').run(p.id, JSON.stringify(p));
     if (!this.get('defaultPreset')) this.set('defaultPreset', p.id);

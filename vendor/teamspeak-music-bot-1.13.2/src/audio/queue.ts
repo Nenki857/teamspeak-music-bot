@@ -6,7 +6,7 @@ export enum PlayMode {
   RandomLoop = "rloop",
 }
 
-/** Legacy saved modes map to the three modes exposed by Music Desk. */
+/** Legacy saved modes map to the three modes exposed by Music Bot. */
 export function normalizePlayMode(value: unknown): PlayMode {
   if (value === PlayMode.Single) return PlayMode.Single;
   if (value === PlayMode.Random || value === PlayMode.RandomLoop) return PlayMode.Random;

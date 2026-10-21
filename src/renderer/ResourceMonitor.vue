@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 const props=defineProps({server:Boolean,loadSample:Function});
-const server = Boolean(props.server || window.musicDesk?.server);
+const server = Boolean(props.server || window.musicBot?.server);
 const frequency=server?2000:1000;
 const memoryDetail=computed(()=>server && !missing(sample.value?.memory?.totalBytes) ? bytes(sample.value.memory.totalBytes)+' 总计 · '+(missing(sample.value.memory.percent)?'—':sample.value.memory.percent.toFixed(0)+'%') : '');
 const loadValue=value=>missing(value)?'—':value.toFixed(2);
@@ -33,7 +33,7 @@ async function poll() {
   if (disposed || document.hidden) return;
   const current = ++generation;
   try {
-    const load=props.loadSample || window.musicDesk?.resources;if(!load)throw new Error('Resource counters unavailable');
+    const load=props.loadSample || window.musicBot?.resources;if(!load)throw new Error('Resource counters unavailable');
     const next = await load();
     if (disposed || current !== generation) return;
     suspended.value = Boolean(next.paused); failed.value = false;

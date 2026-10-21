@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-contextBridge.exposeInMainWorld('musicDesk', {
+contextBridge.exposeInMainWorld('musicBot', {
   rpc: (method, args) => ipcRenderer.invoke('music:rpc', method, args),
   resources: () => ipcRenderer.invoke('music:resources'),
   subscribe: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('music:state', listener); return () => ipcRenderer.removeListener('music:state', listener); },

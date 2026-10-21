@@ -3,7 +3,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const archive = resolve(`release/server/TS-Music-Desk-Server-${pkg.version}.tar.gz`);
+const archive = resolve(`release/server/TS-Music-Bot-Server-${pkg.version}.tar.gz`);
 const listed = spawnSync('tar', ['-tzf', archive], { encoding: 'utf8', windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
 assert.equal(listed.status, 0); const files = listed.stdout.split(/\r?\n/).filter(Boolean).map(name => name.replace(/^\.\//, ''));
 for (const required of ['LICENSE', 'THIRD-PARTY-NOTICES.txt', 'src/server/entry.mjs', 'src/server/admin-auth.mjs', 'src/server/vault-key.mjs', 'src/worker/core-worker-entry.mjs', 'src/worker/music-worker-entry.mjs', 'src/shared/security.mjs', 'dist/ui/index.html', 'deploy/install-ubuntu.sh', 'deploy/preflight.sh', 'deploy/wait-server.sh', 'package-lock.json', 'scripts/migrate-server-library.mjs', 'vendor/teamspeak-music-bot-1.13.2/package-lock.json', 'vendor/teamspeak-music-bot-1.13.2/dist/audio/player.js']) assert.ok(files.includes(required), `Missing ${required}`);

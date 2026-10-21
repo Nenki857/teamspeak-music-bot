@@ -31,7 +31,7 @@ https://${ip} {
 `;
   const unit = `# TSMD managed fixed friend endpoint
 [Unit]
-Description=TS Music Desk fixed HTTPS friend endpoint
+Description=TS Music Bot fixed HTTPS friend endpoint
 After=network-online.target
 Wants=network-online.target
 

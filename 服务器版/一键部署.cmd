@@ -3,7 +3,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 chcp 65001 >nul
 cd /d "%~dp0.."
 if errorlevel 1 goto failed
-echo Music Desk - Server edition
+echo Music Bot - Server edition
 set "TSMD_ACTION=default"
 set "TSMD_CHECK="
 if /i "%~1"=="--check" goto check

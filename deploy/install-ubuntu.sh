@@ -52,7 +52,7 @@ chmod 600 "$APP_DIR/server.env"
 SERVICE_FILE="$APP_DIR/runtime/ts-music-desk.service"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=TS Music Desk server (existing TS3 audio core)
+Description=TS Music Bot server (existing TS3 audio core)
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300

@@ -1,3 +1,4 @@
+import { legacyProjectLockHashes } from './update-dependency-compat.mjs';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, lstatSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -16,9 +17,9 @@ await writeServerIcons(resolve(stage, 'dist/ui'), resolve(root, 'resources/logo-
 const files = {};
 function walk(dir) { for (const item of readdirSync(dir,{withFileTypes:true})) { const path=resolve(dir,item.name); if(lstatSync(path).isSymbolicLink())throw Error('更新包不能包含符号链接'); if(item.isDirectory())walk(path); else files[relative(stage,path).replaceAll('\\','/')]=hash(path); } }
 walk(stage);
-const manifest = {version,kind:'tsmd-code-update',files,dependencies:Object.fromEntries(['package-lock.json','vendor/teamspeak-music-bot-1.13.2/package-lock.json'].map(name=>[name,hash(resolve(root,name))]))};
+const manifest = {version,kind:'tsmd-code-update',files,compatibleDependencies:{'package-lock.json':legacyProjectLockHashes(readFileSync(resolve(root,'package-lock.json'),'utf8'))},dependencies:Object.fromEntries(['package-lock.json','vendor/teamspeak-music-bot-1.13.2/package-lock.json'].map(name=>[name,hash(resolve(root,name))]))};
 writeFileSync(resolve(stage,'update-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
-const archive=resolve(root,`release/server/TS-Music-Desk-Server-${version}-update.tar.gz`);
+const archive=resolve(root,`release/server/TS-Music-Bot-Server-${version}-update.tar.gz`);
 const result=spawnSync('tar',['-czf',archive,'-C',stage,'.'],{stdio:'inherit',windowsHide:true});
 if(result.status!==0)throw Error('小更新包压缩失败');
 writeFileSync(archive+'.sha256',hash(archive)+'  '+relative(resolve(root,'release/server'),archive)+'\n');

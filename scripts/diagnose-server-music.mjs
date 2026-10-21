@@ -115,7 +115,7 @@ if(!isMainThread&&workerData?.role==='music-diagnostic'){
     const [network,musicApi]=await Promise.all([Promise.all(['music.163.com','interface.music.163.com'].map(networkProbe)),api]);
     let version='unknown';try{version=JSON.parse(readFileSync(resolve(app,'package.json'),'utf8')).version;}catch{}
     const candidatePassed=Boolean(sessionAdapter&&musicApi.requests?.length===4&&musicApi.requests.every(item=>item.ok)&&musicApi.qrLogin?.ok);
-    console.log(JSON.stringify({kind:'TS Music Desk music request diagnostics',capturedAt:new Date().toISOString(),version,anonymousOnly:true,accountDataRead:false,sessionRepairTest:Boolean(sessionAdapter),candidatePassed,network,musicApi,rawErrorsIncluded:false},null,2));
+    console.log(JSON.stringify({kind:'TS Music Bot music request diagnostics',capturedAt:new Date().toISOString(),version,anonymousOnly:true,accountDataRead:false,sessionRepairTest:Boolean(sessionAdapter),candidatePassed,network,musicApi,rawErrorsIncluded:false},null,2));
     if(sessionAdapter&&!candidatePassed)process.exitCode=21;
   }finally{await worker.terminate();}
 }

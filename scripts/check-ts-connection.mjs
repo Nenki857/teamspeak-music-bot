@@ -10,7 +10,7 @@ if (!preset || preset.serverPassword || preset.channelPassword) throw new Error(
 const { TS3Client } = await import(pathToFileURL(resolve('vendor/teamspeak-music-bot-1.13.2/dist/ts-protocol/client.js')).href);
 const began = Date.now(); const trace = message => console.log(JSON.stringify({ ms: Date.now() - began, message }));
 const logger = { info: (...args) => trace(args.find(a => typeof a === 'string') || 'info'), warn: (...args) => trace(args.find(a => typeof a === 'string') || 'warn'), error: (...args) => trace(args.find(a => typeof a === 'string') || 'error'), debug() {}, child() { return this; } };
-const client = new TS3Client({ host: preset.serverAddress, port: preset.serverPort, queryPort: 10011, nickname: 'MusicDesk_Check_' + Date.now().toString().slice(-4), serverProtocol: 'ts3', directVoiceConnection: true, defaultChannel: preset.defaultChannel, channelId: preset.channelId }, logger);
+const client = new TS3Client({ host: preset.serverAddress, port: preset.serverPort, queryPort: 10011, nickname: 'MusicBot_Check_' + Date.now().toString().slice(-4), serverProtocol: 'ts3', directVoiceConnection: true, defaultChannel: preset.defaultChannel, channelId: preset.channelId }, logger);
 client.on('connected', () => trace('Wrapper connected event'));
 client.on('disconnected', () => trace('Wrapper disconnected event'));
 const timer = setInterval(() => { const raw = client.client; trace(`Status=${raw?.status}, clientId=${raw?.clientID()}, channelId=${raw?.channelID()}`); }, 2000);

@@ -141,7 +141,7 @@ try {
   assert.equal(await alice.locator('.guest-playlists>button').last().getAttribute('aria-label'),'添加歌单');
   const ownerContext = await context(); const owner = await ownerContext.newPage(); owner.on('pageerror',error=>errors.push(error.message));
   await owner.exposeFunction('desktopRpc',(method,args)=>service.rpc(method,args));
-  await owner.addInitScript(()=>{window.musicDesk={rpc:(...args)=>window.desktopRpc(...args),subscribe:()=>()=>{},resources:async()=>({paused:true}),copy:async()=>true,quit(){}};});
+  await owner.addInitScript(()=>{window.musicBot={rpc:(...args)=>window.desktopRpc(...args),subscribe:()=>()=>{},resources:async()=>({paused:true}),copy:async()=>true,quit(){}};});
   await owner.goto(origin); await owner.getByRole('button',{name:'开放歌单',exact:true}).click();
   await owner.locator('.playlist-grid .playlist-card').filter({hasText:'Alice 的夜间歌单'}).click(); await owner.getByRole('button',{name:'编辑歌单',exact:true}).click();
   await owner.getByRole('textbox',{name:'自建歌单名称',exact:true}).fill('Alice 的夜间歌单（已编辑）'); await owner.locator('.draft-song-row').nth(0).dragTo(owner.locator('.draft-song-row').nth(1));

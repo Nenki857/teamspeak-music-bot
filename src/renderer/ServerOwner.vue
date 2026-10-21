@@ -5,8 +5,8 @@ import { createServerBridge } from './server-bridge.mjs';
 const ready = ref(false); const checking = ref(true); const password = ref(''); const busy = ref(false); const error = ref('');
 const remember = ref(false); const showPassword = ref(false);
 let bridge;
-function expired() { ready.value = false; bridge?.dispose(); delete window.musicDesk; password.value = ''; showPassword.value = false; }
-function authorize(csrf) { bridge = createServerBridge(csrf, expired); window.musicDesk = bridge; ready.value = true; error.value = ''; }
+function expired() { ready.value = false; bridge?.dispose(); delete window.musicBot; password.value = ''; showPassword.value = false; }
+function authorize(csrf) { bridge = createServerBridge(csrf, expired); window.musicBot = bridge; ready.value = true; error.value = ''; }
 onMounted(async () => {
   try { const response = await fetch('/api/admin/session'); const data = await response.json(); if (data.ok) authorize(data.csrf); }
   catch { error.value = '暂时无法连接服务器，请稍后刷新'; }
@@ -20,13 +20,13 @@ async function login() {
   } catch (failure) { error.value = failure.message; }
   finally { busy.value = false; }
 }
-onUnmounted(() => { bridge?.dispose(); delete window.musicDesk; });
+onUnmounted(() => { bridge?.dispose(); delete window.musicBot; });
 </script>
 <template>
   <App v-if="ready" />
   <main v-else class="server-login-screen">
     <form class="server-login-card" @submit.prevent="login">
-      <img src="/logo.png" alt="Music Desk"><span class="eyebrow">TS MUSIC DESK · SERVER</span>
+      <img src="/logo.png" alt="Music Bot"><span class="eyebrow">TS MUSIC BOT · SERVER</span>
       <h1>主人控制台</h1><p>管理音乐账号、服务器和共享权限。关闭网页后，机器人继续运行。</p>
       <p v-if="checking" role="status">正在检查登录状态…</p>
       <template v-else>

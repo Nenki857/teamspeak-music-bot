@@ -20,7 +20,7 @@ try {
   await page.getByLabel('目标频道 ID', { exact: true }).fill('42');
   await page.getByRole('button', { name: '保存预设', exact: true }).click();
   await page.getByText('UI 检查预设', { exact: true }).first().waitFor();
-  assert.equal(await page.evaluate(() => window.musicDesk.rpc('status').then(s => s.presets.length)), 1);
+  assert.equal(await page.evaluate(() => window.musicBot.rpc('status').then(s => s.presets.length)), 1);
   await page.screenshot({ path: resolve('work/ui-home.png'), fullPage: true });
   await page.getByRole('button', { name: '♫音乐与歌单', exact: true }).click();
   await page.getByRole('button', { name: '↗分享控制', exact: true }).click();
@@ -28,9 +28,9 @@ try {
   await page.screenshot({ path: resolve('work/ui-sharing.png'), fullPage: true });
   await page.getByRole('button', { name: '⚙设置与状态', exact: true }).click();
   await page.getByRole('heading', { name: '设置与运行状态' }).waitFor();
-  const auth = await page.evaluate(() => window.musicDesk.rpc('status').then(s => ({ ready: s.ready, phase: s.phase, auth: s.auth.loggedIn })));
+  const auth = await page.evaluate(() => window.musicBot.rpc('status').then(s => ({ ready: s.ready, phase: s.phase, auth: s.auth.loggedIn })));
   assert.equal(auth.ready, true); assert.equal(auth.auth, false);
-  const live = await page.evaluate(async () => { const results = {}; try { const search = await window.musicDesk.rpc('music.search', { query: '晴天' }); results.searchSongs = search.songs.length; } catch (e) { results.searchError = e.message; } try { const qr = await window.musicDesk.rpc('auth.qr'); results.qrAvailable = !!(qr.qrImg && qr.qrUrl); } catch (e) { results.qrError = e.message; } return results; });
+  const live = await page.evaluate(async () => { const results = {}; try { const search = await window.musicBot.rpc('music.search', { query: '晴天' }); results.searchSongs = search.songs.length; } catch (e) { results.searchError = e.message; } try { const qr = await window.musicBot.rpc('auth.qr'); results.qrAvailable = !!(qr.qrImg && qr.qrUrl); } catch (e) { results.qrError = e.message; } return results; });
   console.log('Live music API:', JSON.stringify(live));
   await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
   assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()), false);

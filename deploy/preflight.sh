@@ -13,7 +13,7 @@ if ! sudo -n -l -- /usr/bin/apt-get update >/dev/null 2>&1; then
   exit 20
 fi
 if systemctl is-active --quiet ts-music-desk.service; then
-  echo 'An existing Music Desk service is active. Stop here and follow the upgrade guide.' >&2
+  echo 'An existing Music Bot service is active. Stop here and follow the upgrade guide.' >&2
   exit 1
 fi
 if [[ -n $(ss -H -ltn 'sport = :18080') ]]; then

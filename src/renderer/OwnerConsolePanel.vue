@@ -8,7 +8,7 @@ const currentAddress = computed(() => props.server ? `${window.location.origin}/
 const publicAddress = computed(() => props.server && !props.friendOnly && props.tunnel?.status === 'online' && props.tunnel.url ? `${props.tunnel.url}/admin` : '');
 const friendAddress = computed(() => [...(props.grants || [])].reverse().find(item => item.url)?.url || '');
 async function copy(value) {
-  try { if (window.musicDesk?.copy) await window.musicDesk.copy(value); else await navigator.clipboard.writeText(value); emit('notice', '地址已复制'); }
+  try { if (window.musicBot?.copy) await window.musicBot.copy(value); else await navigator.clipboard.writeText(value); emit('notice', '地址已复制'); }
   catch { error.value = '复制失败，请选中地址手动复制'; }
 }
 function clear() { currentPassword.value = ''; newPassword.value = ''; confirmation.value = ''; error.value = ''; }

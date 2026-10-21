@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fixedEndpointConfig, writeFixedEndpointFiles } from '../src/server/fixed-endpoint-config.mjs';
-const input={ip:'203.0.113.10',app:'/home/ubuntu/ts-music-desk-server-1.2.0',user:'ubuntu',environment:'# my settings\nTSMD_DATA_DIR=/home/ubuntu/ts-music-desk-server-1.2.0/server-data\nTSMD_HOST=127.0.0.1\nTSMD_PORT=18080\nTSMD_AUTOSTART=0\nTSMD_PUBLIC_URL=https://old.example.test\nTSMD_PERSISTENT_SHARES=0\nTSMD_FRIEND_PORT=18082\n'};
+const input={ip:'203.0.113.10',app:'/home/ubuntu/ts-music-bot-server-1.2.0',user:'ubuntu',environment:'# my settings\nTSMD_DATA_DIR=/home/ubuntu/ts-music-bot-server-1.2.0/server-data\nTSMD_HOST=127.0.0.1\nTSMD_PORT=18080\nTSMD_AUTOSTART=0\nTSMD_PUBLIC_URL=https://old.example.test\nTSMD_PERSISTENT_SHARES=0\nTSMD_FRIEND_PORT=18082\n'};
 test('IP HTTPS configuration preserves private data and autostart settings and isolates the owner listener',()=>{
   const value=fixedEndpointConfig(input);
   assert.ok(value.environment.includes('TSMD_AUTOSTART=0'));assert.ok(value.environment.includes('TSMD_HOST=127.0.0.1'));assert.ok(value.environment.includes('TSMD_DATA_DIR='+input.app+'/server-data'));

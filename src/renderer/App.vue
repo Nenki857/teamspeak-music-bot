@@ -23,8 +23,8 @@ const communityMode = ref('find'); const community = ref(null); const guestDraft
 const guestHistory = ref([]); const guestHistoryFilter = ref(''); const guestHistoryLoading = ref(false); const guestHistoryError = ref('');
 const shownGuestHistory = computed(() => { const query = guestHistoryFilter.value.trim().toLocaleLowerCase(); return guestHistory.value.filter(name => name.toLocaleLowerCase().includes(query)); });
 try { guestDraft.value = localStorage.getItem('tsmd_guest_name_v1') || ''; } catch {}
-const local = !!window.musicDesk;
-const desktop = window.musicDesk;
+const local = !!window.musicBot;
+const desktop = window.musicBot;
 const serverOwner = Boolean(desktop?.server);
 const failedQueueCovers = ref(new Set());const queuePanel=ref(null);
 // NetEase sometimes returns HTTP or scheme-relative CDN links. Share pages use HTTPS.
@@ -68,7 +68,7 @@ const formatTime = seconds => { const s = Math.max(0, Math.floor(seconds || 0));
 const duration = computed(() => player.value.effectiveDuration || song.value?.duration || 0);
 async function request(method, args = {}) {
   // Match the JSON wire format and strip nested reactive proxies before IPC.
-  if (local) return window.musicDesk.rpc(method, JSON.parse(JSON.stringify(args)));
+  if (local) return window.musicBot.rpc(method, JSON.parse(JSON.stringify(args)));
   const response = await fetch('/api/share/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-TSMD-CSRF': csrf }, body: JSON.stringify({ method, args, id: crypto.randomUUID() }) });
   const data = await response.json(); if (!data.ok) throw new Error(data.error); return data.result;
 }
@@ -116,7 +116,7 @@ async function dropQueueDrag(event, item, index) {
   if (!dragged || !canReorder(index) || dragged.entryId === item.entryId) return;
   event.preventDefault(); await moveQueue(dragged.entryId, item.entryId, dragged.revision, dragged.runId);
 }
-function newPreset(existing) { editing.value = existing || null; form.value = existing ? { ...existing, serverPassword: undefined, channelPassword: undefined } : { name: '', serverAddress: '', serverPort: 9987, nickname: 'Music Desk', defaultChannel: '', channelId: '', serverPassword: '', channelPassword: '' }; modal.value = 'preset'; }
+function newPreset(existing) { editing.value = existing || null; form.value = existing ? { ...existing, serverPassword: undefined, channelPassword: undefined } : { name: '', serverAddress: '', serverPort: 9987, nickname: 'Music Bot', defaultChannel: '', channelId: '', serverPassword: '', channelPassword: '' }; modal.value = 'preset'; }
 async function savePreset() {
   if (busy.value || !presetForm.value?.reportValidity()) return;
   const values = JSON.parse(JSON.stringify(form.value));
@@ -211,7 +211,7 @@ async function importPlaylistFile(event) {
   if (saved) { page.value = 'music'; guestSection.value = 'shared'; musicTab.value = 'playlists'; playlistType.value = 'shared'; playlists.value = state.value.publications || []; selectedArtist.value = null; selectedPlaylist.value = saved; notify('歌单已导入并开放'); }
 }
 async function deletePlaylist() { const item = deletingPlaylist.value; const done = await action('删除歌单', () => request('playlist.delete', { id: item.id, runId: state.value.runId, expectedUpdatedAt: item.updatedAt })); if (done) { if (!local) await refresh(); modal.value = ''; selectedPlaylist.value = null; playlists.value = playlistType.value === 'local' ? state.value.localPlaylists || [] : state.value.publications || []; notify(item.source === 'local' ? '歌单已删除，当前播放队列不受影响' : '已移除开放歌单，网易云原歌单保留'); } }
-async function copy(text) { if (!text) return; try { if (local) await window.musicDesk.copy(text); else await navigator.clipboard.writeText(text); notify('链接已复制'); } catch { error.value = '复制失败，请手动选中链接复制'; } }
+async function copy(text) { if (!text) return; try { if (local) await window.musicBot.copy(text); else await navigator.clipboard.writeText(text); notify('链接已复制'); } catch { error.value = '复制失败，请手动选中链接复制'; } }
 async function createGrant() { const data = await action('创建授权', () => request('sharing.create', { name: grantName.value, permissions: grantPermissions.value })); if (data) notify('授权已创建'); }
 async function changePermission(grant, permission, checked) { const permissions = checked ? [...grant.permissions, permission] : grant.permissions.filter(p => p !== permission); await action('修改权限', () => request('sharing.permissions', { id: grant.id, permissions })); }
 watch(modal, async (value, previous, onCleanup) => {
@@ -258,7 +258,7 @@ async function readChannels() { const data = await action('读取频道', () => 
 function openPage(next) { page.value = next; error.value = ''; if (next === 'music' && musicTab.value === 'playlists') loadPlaylists(); }
 function connectEvents() { if (socket) socket.close(); socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/events?delta=1`); socket.onmessage = event => { const message = JSON.parse(event.data); if (message.type === 'state') { terminal.value = ''; update(message.partial ? { ...state.value, ...message.state, player: { ...state.value.player, ...message.state.player } } : message.state); } if (message.type === 'revoked') { terminal.value = '链接已失效：机器人已关闭或主人撤销了授权。'; sessionStorage.removeItem('tsmd_csrf'); } }; socket.onclose = () => { if (!terminal.value) setTimeout(connectEvents, 4000); }; }
 onMounted(async () => {
-  if (local) { unsubscribe = window.musicDesk.subscribe(update); await refresh(); timer = setInterval(refresh, 6000); }
+  if (local) { unsubscribe = window.musicBot.subscribe(update); await refresh(); timer = setInterval(refresh, 6000); }
   else {
     const fragment = new URLSearchParams(location.hash.slice(1)); const invite = fragment.get('invite'); if (!document.documentElement.hasAttribute('data-persistent-invitations')) history.replaceState({}, '', location.pathname);
     if (invite) { try { const response = await fetch('/api/share/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: invite }) }); const data = await response.json(); if (!data.ok) throw new Error(data.error); csrf = data.csrf; sessionStorage.setItem('tsmd_csrf', csrf); } catch (e) { terminal.value = e.message; return; } }
@@ -275,11 +275,11 @@ onUnmounted(() => { queueTouch.cancel(); clearInterval(timer); clearInterval(qrT
 </script>
 
 <template>
-  <div v-if="terminal && !local" class="expired-screen"><div class="brand-mark"><img :src="'./logo.png'" alt="TS Music Desk Logo"></div><h1>此控制链接暂时不可用</h1><p>{{ terminal }}</p><span>TS Music Desk · 共享控制</span></div>
+  <div v-if="terminal && !local" class="expired-screen"><div class="brand-mark"><img :src="'./logo.png'" alt="TS Music Bot Logo"></div><h1>此控制链接暂时不可用</h1><p>{{ terminal }}</p><span>TS Music Bot · 共享控制</span></div>
   <div v-else class="app-shell" :class="{ shared: !local, desktop: local, 'server-owner': serverOwner }">
     <aside class="sidebar adaptive-sidebar" :class="{ 'server-sidebar': serverSidebar }">
       <div class="sidebar-top">
-      <div class="brand"><div class="brand-mark"><img :src="'./logo.png'" alt="TS Music Desk Logo"></div><div>Music Desk<small>TEAMSPEAK BOT</small></div><span class="version">1.2</span></div>
+      <div class="brand"><div class="brand-mark"><img :src="'./logo.png'" alt="TS Music Bot Logo"></div><div>Music Bot<small>TEAMSPEAK BOT</small></div><span class="version">1.2</span></div>
       <div class="sidebar-caption">{{ local ? '你的音乐空间' : '朋友的音乐空间' }}</div>
       <nav aria-label="音乐分页">
           <button :class="{ active: page === 'queue' }" @click="openPage('queue')" aria-label="播放队列"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h12M4 12h12M4 18h7"/><path d="m17 15 4 3-4 3z"/></svg>播放队列</button>
@@ -411,7 +411,7 @@ onUnmounted(() => { queueTouch.cancel(); clearInterval(timer); clearInterval(qrT
       </div>
     </main>
 
-    <footer class="player-bar"><div class="player-song"><div class="small-cover"><img v-if="song?.coverUrl" :src="artworkUrl(song.coverUrl)" alt=""><span v-else>♫</span></div><div><strong>{{ song?.name || '等待播放' }}</strong><small class="player-artists"><template v-if="currentSongArtists.length"><template v-for="(artist,index) in currentSongArtists" :key="artist.id || artist.name"><span v-if="index" aria-hidden="true"> / </span><button v-if="can('search')" type="button" class="artist-link" :disabled="isBusy || !state.ready" :aria-label="currentArtistLabel(artist)" :title="currentArtistLabel(artist)" @click="openArtist(artist)">{{ artist.name }}</button><span v-else>{{ artist.name }}</span></template></template><template v-else>TS Music Desk</template></small></div></div><div class="player-center"><div class="transport"><button @click="control('player.prev')" :disabled="!running || isBusy || !can('skip')" title="上一首">◀❙</button><button class="play-button" @click="control(player.paused ? 'player.resume' : player.playing ? 'player.pause' : 'player.resume')" :disabled="!running || isBusy || !can('transport')" :title="player.playing ? '暂停' : '播放'" :aria-label="player.playing ? '暂停' : '播放'"><svg class="transport-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><template v-if="player.playing"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></template><path v-else d="M8 5v14l12-7z"/></svg></button><button @click="control('player.next')" :disabled="!running || isBusy || !can('skip')" title="下一首">❙▶</button><PlayModeControl :mode="player.playMode || 'loop'" :disabled="!running || isBusy || !can('mode')" @select="control('player.mode', { value: $event })"/></div><div class="progress"><span>{{ formatTime(player.elapsed) }}</span><input type="range" :min="0" :max="duration || 1" :value="player.elapsed || 0" @change="control('player.seek', { value: Number($event.target.value) })" :disabled="!song || isBusy || !can('seek')" aria-label="播放进度"><span>{{ formatTime(duration) }}</span></div></div><VolumeControl :volume="player.volume ?? 50" :disabled="!running || isBusy || !can('volume')" :set-volume="value => control('player.volume', { value })"/></footer>
+    <footer class="player-bar"><div class="player-song"><div class="small-cover"><img v-if="song?.coverUrl" :src="artworkUrl(song.coverUrl)" alt=""><span v-else>♫</span></div><div><strong>{{ song?.name || '等待播放' }}</strong><small class="player-artists"><template v-if="currentSongArtists.length"><template v-for="(artist,index) in currentSongArtists" :key="artist.id || artist.name"><span v-if="index" aria-hidden="true"> / </span><button v-if="can('search')" type="button" class="artist-link" :disabled="isBusy || !state.ready" :aria-label="currentArtistLabel(artist)" :title="currentArtistLabel(artist)" @click="openArtist(artist)">{{ artist.name }}</button><span v-else>{{ artist.name }}</span></template></template><template v-else>TS Music Bot</template></small></div></div><div class="player-center"><div class="transport"><button @click="control('player.prev')" :disabled="!running || isBusy || !can('skip')" title="上一首">◀❙</button><button class="play-button" @click="control(player.paused ? 'player.resume' : player.playing ? 'player.pause' : 'player.resume')" :disabled="!running || isBusy || !can('transport')" :title="player.playing ? '暂停' : '播放'" :aria-label="player.playing ? '暂停' : '播放'"><svg class="transport-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><template v-if="player.playing"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></template><path v-else d="M8 5v14l12-7z"/></svg></button><button @click="control('player.next')" :disabled="!running || isBusy || !can('skip')" title="下一首">❙▶</button><PlayModeControl :mode="player.playMode || 'loop'" :disabled="!running || isBusy || !can('mode')" @select="control('player.mode', { value: $event })"/></div><div class="progress"><span>{{ formatTime(player.elapsed) }}</span><input type="range" :min="0" :max="duration || 1" :value="player.elapsed || 0" @change="control('player.seek', { value: Number($event.target.value) })" :disabled="!song || isBusy || !can('seek')" aria-label="播放进度"><span>{{ formatTime(duration) }}</span></div></div><VolumeControl :volume="player.volume ?? 50" :disabled="!running || isBusy || !can('volume')" :set-volume="value => control('player.volume', { value })"/></footer>
   </div>
 
   <div v-if="modal" class="modal-backdrop" @click.self="dismissBackdrop"><div class="modal" :class="{ wide: modal === 'preset', 'server-login-modal': modal === 'login' && serverOwner, 'official-browser-modal': modal === 'login' && serverOwner && authMethod === 'browser' }"><button class="modal-close" type="button" @click="closeModal">×</button>
@@ -424,7 +424,7 @@ onUnmounted(() => { queueTouch.cancel(); clearInterval(timer); clearInterval(qrT
           <label class="field-label full">预设名称<input v-model="form.name" required placeholder="例如：朋友的开黑频道" maxlength="80"></label>
           <label class="field-label">服务器地址<input v-model="form.serverAddress" required placeholder="域名或 IP，可带 :9987"></label>
           <label class="field-label">语音端口<input v-model.number="form.serverPort" type="number" min="1" max="65535" required></label>
-          <label class="field-label">机器人昵称<input v-model="form.nickname" maxlength="30" placeholder="Music Desk"></label>
+          <label class="field-label">机器人昵称<input v-model="form.nickname" maxlength="30" placeholder="Music Bot"></label>
           <label class="field-label">服务器密码<input v-model="form.serverPassword" type="password" autocomplete="new-password" :placeholder="editing?.hasServerPassword ? '留空保持原密码' : '没有密码可留空'"></label>
           <label class="field-label">目标频道名称<input v-model="form.defaultChannel" placeholder="可留空，进入默认频道"></label>
           <label class="field-label">目标频道 ID<input v-model="form.channelId" inputmode="numeric" placeholder="选填，优先于频道名称"></label>

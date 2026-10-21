@@ -45,7 +45,7 @@ try {
   const browserStorage=await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}));assert.ok(!browserStorage.includes('synthetic-browser-test-password'));
   await page.getByRole('button', { name: '控制台', exact: true }).click();
   await page.getByRole('heading', { name: '把音乐带进你的频道', exact: true }).waitFor();
-  const status = await page.evaluate(() => window.musicDesk.rpc('status'));
+  const status = await page.evaluate(() => window.musicBot.rpc('status'));
   assert.equal(status.runtime.deployment, 'server'); assert.equal(status.audioHealth.isolatedCore, true); assert.equal(status.phase, 'stopped');
   assert.equal(status.runtime.audioBackend,official?'official':'custom');if(official)assert.equal(status.audioHealth.officialClient,true);
   assert.equal(status.runtime.persistentShares,true);assert.equal(status.runtime.friendOnlyEndpoint,true);
@@ -102,7 +102,7 @@ try {
   await page.getByRole('button',{name:/重启机器人/}).click();await page.getByRole('button',{name:'确认重启机器人',exact:true}).waitFor();
   assert.equal(restartCalls.length,0,'choosing restart must not submit until confirmed');
   await page.getByRole('button',{name:'确认重启机器人',exact:true}).click();await page.locator('.modal').waitFor({state:'detached'});
-  const savedState=await page.evaluate(()=>window.musicDesk.rpc('status'));assert.deepEqual(restartCalls,[{id:savedState.presets[0].id}]);
+  const savedState=await page.evaluate(()=>window.musicBot.rpc('status'));assert.deepEqual(restartCalls,[{id:savedState.presets[0].id}]);
   await page.unroute('**/api/admin/rpc');await page.getByRole('button',{name:'管理操作',exact:true}).click();
   await page.getByRole('button',{name:/退出管理端登录/}).click(); await page.getByLabel('主人密码', { exact: true }).waitFor();
   await page.getByLabel('主人密码', { exact: true }).fill('synthetic-changed-owner-password'); await page.getByRole('button', { name: '登录控制台', exact: true }).click(); await page.locator('.queue-expanded').waitFor();

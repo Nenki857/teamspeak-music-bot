@@ -9,10 +9,11 @@ import { loadWindowState, rememberWindowState } from './window-state.mjs';
 import { createResourceMonitor } from './resource-monitor.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 // The control UI does not need GPU acceleration; software rendering also works on remote desktops.
+app.setName('TS Music Bot');
 app.disableHardwareAcceleration();
 if (process.env.TSMD_HEADLESS_CHECK === '1') app.commandLine.appendSwitch('in-process-gpu');
 const data = resolveDataDirectory({ packaged: app.isPackaged, projectRoot: root, appData: app.getPath('appData'), override: process.env.TSMD_DATA_DIR }); mkdirSync(data, { recursive: true });
-if (process.platform === 'win32') app.setAppUserModelId('local.tsmusicdesk.app');
+if (process.platform === 'win32') app.setAppUserModelId('local.tsmusicbot.app');
 const logDir = resolve(data, 'logs'); mkdirSync(logDir, { recursive: true });
 const diagnostic = message => { try { appendFileSync(resolve(logDir, 'desktop-startup.log'), `${new Date().toISOString()} ${String(message).slice(0, 400)}\n`); } catch {} };
 diagnostic('Desktop startup');
@@ -60,7 +61,7 @@ function createWindow() {
   const restored = loadWindowState(preferencesFile, screen.getAllDisplays().map(display => display.workArea), screen.getPrimaryDisplay().workArea);
   window = new BrowserWindow({
     ...restored.bounds, minWidth: restored.minWidth, minHeight: restored.minHeight, show: false,
-    backgroundColor: '#0d1018', title: 'TS Music Desk · 音乐机器人', icon: resolve(root, 'resources/app.ico'), autoHideMenuBar: true,
+    backgroundColor: '#0d1018', title: 'TS Music Bot · 音乐机器人', icon: resolve(root, 'resources/app.ico'), autoHideMenuBar: true,
     titleBarStyle: 'hidden', titleBarOverlay: { color: '#0d1018', symbolColor: '#a4aec0', height: 64 },
     webPreferences: { preload: resolve(root, 'src/desktop/preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true }
   });
@@ -74,7 +75,7 @@ function createWindow() {
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   const icon = nativeImage.createFromPath(resolve(root, 'resources/app.ico'));
-  tray = new Tray(icon); tray.setToolTip('TS Music Desk · 关闭窗口后继续运行');
+  tray = new Tray(icon); tray.setToolTip('TS Music Bot · 关闭窗口后继续运行');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开音乐控制台', click: showWindow }, { type: 'separator' }, { label: '停止机器人并退出', click: () => app.quit() }])); tray.on('double-click', showWindow);
 }
 ipcMain.handle('music:rpc', async (event, method, args) => { if (event.sender !== window?.webContents || !methods.has(method)) throw new Error('操作不可用'); if (method === 'status') return state; return rpc(method, args); });
